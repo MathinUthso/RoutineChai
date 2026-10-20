@@ -27,6 +27,7 @@ Repo-local subagents are configured in `.opencode/agents/`. Main agent plans and
 
 ## Development & Verification
 - **Package Manager**: `npm` (default). Run commands from repository root.
+- **Dev Servers**: `.\dev.ps1` starts backend and frontend together; `.\dev.ps1 -Check` verifies startup and stops both.
 - **Dev Server**: `npm run dev` (when initialized).
 - **Lint & Typecheck**: Run narrow checks covering touched files (`npm run lint`, `npx tsc --noEmit`).
 - **Dependencies**: Do not install new dependencies without clear necessity for the immediate task.

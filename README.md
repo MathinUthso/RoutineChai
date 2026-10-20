@@ -14,6 +14,34 @@ The registrar week is **Saturday through Wednesday**. Thursday and Friday are we
 
 ## Quick Start
 
+### One command
+
+After installing the backend venv and frontend dependencies, run both services from the repository root:
+
+```powershell
+.\dev.ps1
+```
+
+The script starts Uvicorn and Next.js together, points the frontend at the selected backend port, sets the backend CORS origin to the selected frontend port, waits for both services, and keeps them running until `Ctrl+C`. It stops both process trees on exit. If a default port is busy, it uses the next available port and prints a warning.
+
+Verify the full startup without leaving servers running:
+
+```powershell
+.\dev.ps1 -Check
+```
+
+Choose explicit ports when needed:
+
+```powershell
+.\dev.ps1 -BackendPort 8010 -FrontendPort 3100
+```
+
+If PowerShell blocks local scripts, run:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\dev.ps1
+```
+
 ### 1. Backend
 
 From the repository root:
