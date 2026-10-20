@@ -43,7 +43,7 @@ export function defaultConstraints(): Constraints {
 }
 
 export function emptyPreference(): CoursePreference {
-  return { allowed_sections: [], preferred_faculty: [] };
+  return { allowed_sections: [], preferred_faculty: [], excluded_faculty: [] };
 }
 
 /** Returns minutes since midnight for "HH:MM", or null when unparseable. */

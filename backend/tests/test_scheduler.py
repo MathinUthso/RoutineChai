@@ -4,7 +4,7 @@ Schema under test (see ``tests/fixtures/*.json``):
   catalog: term / programs / generated_at / source / courses
   course:  code / title / credits / programs / kind / sections
   section: name / if_required / faculty{name,initials} / meetings[{day,start,end,room}]
-  request: program / courses[{code,allowed_sections?,preferred_faculty?}] /
+  request: program / courses[{code,allowed_sections?,preferred_faculty?,excluded_faculty?}] /
            constraints{blocked,max_sessions_per_day,allowed_days,
                        time_preference,preferred_off_days} / limit
 
@@ -558,6 +558,43 @@ def test_preferred_faculty_ranks_matching_section_first(
     assert section_name(courses_of(routines(result)[0])[0]) == expected, (
         f"preferred faculty {initials} should rank section {expected} first"
     )
+
+
+@pytest.mark.parametrize("identity", ["AR", "ar", "Amina Rahman", "amina rahman"])
+def test_excluded_faculty_removes_matching_sections(
+    identity, catalog, request_payload, make_request
+) -> None:
+    payload = request_payload("cse1111_only")
+    payload["courses"][0]["excluded_faculty"] = [identity]
+    result = generate(catalog, make_request(payload))
+
+    assert routines(result)
+    assert section_keys(routines(result)[0]) == (("CSE 1111", "B"),)
+
+
+def test_excluding_every_faculty_returns_course_without_candidates(
+    catalog, request_payload, make_request
+) -> None:
+    payload = request_payload("cse1111_only")
+    payload["courses"][0]["excluded_faculty"] = ["Amina Rahman", "TA"]
+    result = generate(catalog, make_request(payload))
+
+    assert routines(result) == []
+    assert "CSE 1111" in excluded_courses(result).get("courses_without_candidates", set())
+
+
+def test_excluded_faculty_overrides_overlapping_preference(
+    catalog, request_payload, make_request
+) -> None:
+    payload = request_payload("cse1111_only")
+    payload["courses"][0]["preferred_faculty"] = ["Amina Rahman"]
+    payload["courses"][0]["excluded_faculty"] = ["AR"]
+    result = generate(catalog, make_request(payload))
+
+    assert routines(result)
+    routine = routines(result)[0]
+    assert section_keys(routine) == (("CSE 1111", "B"),)
+    assert _attr(_attr(routine, "breakdown"), "faculty") == 100.0
 
 
 def test_compactness_prefers_gapless_routine(make_catalog, make_request) -> None:

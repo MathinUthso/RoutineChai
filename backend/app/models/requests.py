@@ -15,6 +15,7 @@ class SelectedCourse(BaseModel):
     code: str
     allowed_sections: list[str] | None = None
     preferred_faculty: list[str] | None = None
+    excluded_faculty: list[str] | None = None
 
 
 class BlockedInterval(BaseModel):

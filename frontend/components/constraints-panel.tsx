@@ -210,7 +210,7 @@ export function ConstraintsPanel({
               ))}
             </dl>
             <p className="mono-label border-t border-rule px-4 py-2.5 leading-relaxed text-ink-faint">
-              Section pins are hard filters; faculty choices are ranking signals.
+              Section pins and excluded faculty are hard filters; preferred faculty ranks.
             </p>
           </div>
 

@@ -116,7 +116,7 @@ def generate(catalog: Catalog, request: GenerateRequest) -> GenerateResult:
         _course_candidates(course, item, request.constraints, blocked)
         for course, item in selected
     ]
-    codes = [course.code for course, _ in selected]
+    codes = [course.code.strip() for course, _ in selected]
 
     without = [code for code, options in zip(codes, candidates) if not options]
     if without:
@@ -134,11 +134,14 @@ def generate(catalog: Catalog, request: GenerateRequest) -> GenerateResult:
             truncated=False,
         )
 
-    faculty_prefs = {
-        item.code.strip(): {name.strip().casefold() for name in item.preferred_faculty if name.strip()}
-        for _, item in selected
-        if item.preferred_faculty
-    }
+    faculty_prefs: dict[str, set[str]] = {}
+    for course, item in selected:
+        preferred = {
+            name.strip().casefold() for name in item.preferred_faculty or [] if name.strip()
+        }
+        preferred -= _excluded_faculty_identities(course, item)
+        if preferred:
+            faculty_prefs[course.code.strip()] = preferred
 
     solutions, truncated = _search(
         candidates, codes, request, faculty_prefs, time.monotonic() + TIME_LIMIT_SECONDS
@@ -205,7 +208,7 @@ def _candidate(
         masks[meeting.day] = masks.get(meeting.day, 0) | mask
     meetings.sort()
     return _Candidate(
-        code=course.code,
+        code=course.code.strip(),
         title=course.title,
         credits=course.credits,
         kind=course.kind,
@@ -216,6 +219,30 @@ def _candidate(
     )
 
 
+def _faculty_tokens(section: Section) -> set[str]:
+    return {
+        token
+        for token in (
+            section.faculty.name.strip().casefold(),
+            (section.faculty.initials or "").strip().casefold(),
+        )
+        if token
+    }
+
+
+def _excluded_faculty_identities(course: Course, selected: SelectedCourse) -> set[str]:
+    excluded = {name.strip().casefold() for name in selected.excluded_faculty or [] if name.strip()}
+    if not excluded:
+        return set()
+
+    identities: set[str] = set()
+    for section in course.sections:
+        tokens = _faculty_tokens(section)
+        if tokens & excluded:
+            identities |= tokens
+    return identities
+
+
 def _course_candidates(
     course: Course,
     selected: SelectedCourse,
@@ -223,10 +250,13 @@ def _course_candidates(
     blocked: dict[str, int],
 ) -> list[_Candidate]:
     allowed = {name.strip().casefold() for name in selected.allowed_sections or [] if name.strip()}
+    excluded = {name.strip().casefold() for name in selected.excluded_faculty or [] if name.strip()}
     allowed_days = set(constraints.allowed_days)
     result: list[_Candidate] = []
     seen: set[tuple] = set()
     for section in sorted(course.sections, key=lambda item: item.name):
+        if excluded and _faculty_tokens(section) & excluded:
+            continue
         if allowed:
             if section.name.strip().casefold() not in allowed:
                 continue
@@ -370,9 +400,7 @@ def _metrics(
     if preferred_courses:
         matched = 0
         for candidate in preferred_courses:
-            faculty = candidate.section.faculty
-            names = {faculty.name.strip().casefold(), (faculty.initials or "").strip().casefold()}
-            if names & faculty_prefs[candidate.code]:
+            if _faculty_tokens(candidate.section) & faculty_prefs[candidate.code]:
                 matched += 1
         faculty_score = 100.0 * matched / len(preferred_courses)
     else:

@@ -207,6 +207,7 @@ export function RoutineBuilder() {
               code: course.code,
               allowed_sections: preference?.allowed_sections ?? [],
               preferred_faculty: preference?.preferred_faculty ?? [],
+              excluded_faculty: preference?.excluded_faculty ?? [],
             };
           }),
           constraints,

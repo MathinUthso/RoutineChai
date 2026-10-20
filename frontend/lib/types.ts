@@ -71,12 +71,15 @@ export interface GenerateRequestCourse {
   allowed_sections: string[];
   /** Faculty names or initials; empty means no preference. */
   preferred_faculty: string[];
+  /** Faculty names or initials; matching sections are removed entirely. */
+  excluded_faculty: string[];
 }
 
 /** UI-side preference shape, submitted as `GenerateRequestCourse`. */
 export interface CoursePreference {
   allowed_sections: string[];
   preferred_faculty: string[];
+  excluded_faculty: string[];
 }
 
 export interface GenerateRequest {

@@ -40,7 +40,11 @@ function uniqueFaculty(course: Course): Faculty[] {
 
 function overrideCount(preference: CoursePreference | undefined) {
   if (!preference) return 0;
-  return preference.allowed_sections.length + preference.preferred_faculty.length;
+  return (
+    preference.allowed_sections.length +
+    preference.preferred_faculty.length +
+    preference.excluded_faculty.length
+  );
 }
 
 function panelIdFor(code: string) {
@@ -65,8 +69,8 @@ export function SectionPreferences({ courses, value, onChange }: SectionPreferen
       </div>
 
       <p className="max-w-[68ch] px-4 pt-3.5 text-[0.8125rem] leading-relaxed text-ink-soft">
-        Leave a course on Auto and the solver may use every standard section. Pin sections or name
-        preferred faculty when you want a particular sheet; both are honoured for that course alone.
+        Auto uses every standard section. Pin sections or set faculty preferences per course.
+        Excluded faculty are removed before the solver runs.
       </p>
 
       {courses.length === 0 ? (
@@ -91,21 +95,48 @@ export function SectionPreferences({ courses, value, onChange }: SectionPreferen
 
             const toggleSection = (name: string) => {
               const pinned = preference.allowed_sections.includes(name);
+              const section = sortedSections.find((item) => item.name === name);
               onChange(course.code, {
                 ...preference,
                 allowed_sections: pinned
                   ? preference.allowed_sections.filter((item) => item !== name)
                   : [...preference.allowed_sections, name],
+                excluded_faculty:
+                  !pinned && section
+                    ? preference.excluded_faculty.filter(
+                        (item) => item !== section.faculty.name,
+                      )
+                    : preference.excluded_faculty,
               });
             };
 
-            const toggleFaculty = (name: string) => {
+            const togglePreferredFaculty = (name: string) => {
               const preferred = preference.preferred_faculty.includes(name);
               onChange(course.code, {
                 ...preference,
                 preferred_faculty: preferred
                   ? preference.preferred_faculty.filter((item) => item !== name)
                   : [...preference.preferred_faculty, name],
+                excluded_faculty: preference.excluded_faculty.filter((item) => item !== name),
+              });
+            };
+
+            const toggleExcludedFaculty = (name: string) => {
+              const excluded = preference.excluded_faculty.includes(name);
+              const sectionsTaught = new Set(
+                course.sections
+                  .filter((section) => section.faculty.name === name)
+                  .map((section) => section.name),
+              );
+              onChange(course.code, {
+                ...preference,
+                excluded_faculty: excluded
+                  ? preference.excluded_faculty.filter((item) => item !== name)
+                  : [...preference.excluded_faculty, name],
+                preferred_faculty: preference.preferred_faculty.filter((item) => item !== name),
+                allowed_sections: excluded
+                  ? preference.allowed_sections
+                  : preference.allowed_sections.filter((item) => !sectionsTaught.has(item)),
               });
             };
 
@@ -174,37 +205,65 @@ export function SectionPreferences({ courses, value, onChange }: SectionPreferen
                       </div>
                     </fieldset>
 
-                    <fieldset className="mt-5">
-                      <legend className="mono-label text-ink">Preferred faculty</legend>
-                      <p className="mt-1.5 max-w-[58ch] text-[0.8125rem] leading-relaxed text-ink-faint">
-                        A ranking bonus, not a filter — sheets with these names score higher but
-                        other sections stay available.
-                      </p>
-                      <div className="mt-3 flex flex-wrap gap-1.5">
-                        {faculty.map((person) => (
-                          <Chip
-                            key={person.name}
-                            pressed={preference.preferred_faculty.includes(person.name)}
-                            label={`Prefer ${person.name}`}
-                            title={person.name}
-                            onClick={() => toggleFaculty(person.name)}
-                          >
-                            {person.initials && (
-                              <span className="tracking-[0.04em]">{person.initials}</span>
-                            )}
-                            <span className="max-w-[9.5rem] truncate normal-case tracking-[0.01em]">
-                              {person.name}
-                            </span>
-                          </Chip>
-                        ))}
-                      </div>
-                    </fieldset>
+                    <div className="mt-5 grid gap-x-6 gap-y-5 md:grid-cols-2">
+                      <fieldset>
+                        <legend className="mono-label text-ink">Preferred faculty</legend>
+                        <p className="mt-1.5 max-w-[42ch] text-[0.8125rem] leading-relaxed text-ink-faint">
+                          Ranking bonus. Other sections stay eligible.
+                        </p>
+                        <div className="mt-3 flex flex-wrap gap-1.5">
+                          {faculty.map((person) => (
+                            <Chip
+                              key={person.name}
+                              pressed={preference.preferred_faculty.includes(person.name)}
+                              label={`Prefer ${person.name}`}
+                              title={person.name}
+                              onClick={() => togglePreferredFaculty(person.name)}
+                            >
+                              {person.initials && (
+                                <span className="tracking-[0.04em]">{person.initials}</span>
+                              )}
+                              <span className="max-w-[9.5rem] truncate normal-case tracking-[0.01em]">
+                                {person.name}
+                              </span>
+                            </Chip>
+                          ))}
+                        </div>
+                      </fieldset>
+
+                      <fieldset className="border-t border-rule pt-5 md:border-l md:border-t-0 md:pl-6 md:pt-0">
+                        <legend className="mono-label text-coral-ink">Not preferred faculty</legend>
+                        <p className="mt-1.5 max-w-[42ch] text-[0.8125rem] leading-relaxed text-ink-faint">
+                          Hard filter. Matching sections are removed.
+                        </p>
+                        <div className="mt-3 flex flex-wrap gap-1.5">
+                          {faculty.map((person) => (
+                            <Chip
+                              key={person.name}
+                              pressed={preference.excluded_faculty.includes(person.name)}
+                              label={`Exclude ${person.name}`}
+                              title={person.name}
+                              tone="coral"
+                              mark="cross"
+                              onClick={() => toggleExcludedFaculty(person.name)}
+                            >
+                              {person.initials && (
+                                <span className="tracking-[0.04em]">{person.initials}</span>
+                              )}
+                              <span className="max-w-[9.5rem] truncate normal-case tracking-[0.01em]">
+                                {person.name}
+                              </span>
+                            </Chip>
+                          ))}
+                        </div>
+                      </fieldset>
+                    </div>
 
                     <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-rule pt-3">
                       <p className="mono-label leading-relaxed text-ink-faint">
                         {count === 0
                           ? "Every standard section eligible"
-                          : `${preference.allowed_sections.length} pinned · ${preference.preferred_faculty.length} faculty`}
+                          : `${preference.allowed_sections.length} pinned · ${preference.preferred_faculty.length} preferred · ${preference.excluded_faculty.length} excluded`}
                       </p>
                       <button
                         type="button"

@@ -141,7 +141,7 @@ Always verify the generated schedule against the official registrar notice befor
   "courses": [
     { "code": "CSE 1111" },
     { "code": "CSE 1112", "allowed_sections": ["F"] },
-    { "code": "MATH 1151", "preferred_faculty": ["MTR"] }
+    { "code": "MATH 1151", "preferred_faculty": ["MTR"], "excluded_faculty": ["AR"] }
   ],
   "constraints": {
     "blocked": [{ "day": "Mon", "start": "08:30", "end": "11:10" }],
@@ -165,6 +165,7 @@ A feasible request returns HTTP 200 with ranked `routines` and a `truncated` fla
 - At most `max_sessions_per_day` meetings per day.
 - Course must be offered to the selected program.
 - Conditional (`if_required`) sections are excluded unless explicitly allowed.
+- Sections taught by `excluded_faculty` are removed, even when pinned.
 
 ### Soft constraints
 
