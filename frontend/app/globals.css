@@ -1,0 +1,181 @@
+@import "tailwindcss";
+
+/* ------------------------------------------------------------------ *
+ * Tokens — "registrar's ledger": warm paper, ink, UIU green, coral.
+ * ------------------------------------------------------------------ */
+:root {
+  --paper: #f3ecdf;
+  --paper-raised: #faf6ec;
+  --paper-sunk: #e9e0cf;
+
+  --ink: #1a1815;
+  --ink-soft: #4a4438;
+  --ink-faint: #69614f;
+
+  --rule: #d5c9b4;
+  --rule-strong: #ab9d83;
+
+  --green: #0d5540;
+  --green-deep: #07382a;
+  --green-tint: #dde8df;
+
+  --coral: #c04a2c;
+  --coral-ink: #a23c22;
+  --coral-tint: #f2d7ca;
+
+  /* Weekly grid course blocks: muted paper tints with an ink-dark accent. */
+  --course-clay: #eee0d2;
+  --course-clay-ink: #6f4a2a;
+  --course-moss: #e0e6d4;
+  --course-moss-ink: #3f5530;
+  --course-slate: #dde2e4;
+  --course-slate-ink: #344b52;
+  --course-sand: #f0e7c9;
+  --course-sand-ink: #6b5518;
+  --course-rose: #f0dbd6;
+  --course-rose-ink: #7a3a30;
+  --course-iris: #e1ddec;
+  --course-iris-ink: #443a6b;
+
+  /* Rhythm */
+  --space-gutter: clamp(1.25rem, 4vw, 2.5rem);
+  --measure: 68ch;
+
+  /* Motion */
+  --duration-quick: 140ms;
+  --duration-base: 220ms;
+  --duration-slow: 420ms;
+  --ease-ledger: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --motion-spring-stiffness: 380;
+  --motion-spring-damping: 34;
+  --motion-spring-mass: 0.9;
+}
+
+@theme inline {
+  --color-paper: var(--paper);
+  --color-paper-raised: var(--paper-raised);
+  --color-paper-sunk: var(--paper-sunk);
+
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-ink-faint: var(--ink-faint);
+
+  --color-rule: var(--rule);
+  --color-rule-strong: var(--rule-strong);
+
+  --color-green: var(--green);
+  --color-green-deep: var(--green-deep);
+  --color-green-tint: var(--green-tint);
+
+  --color-coral: var(--coral);
+  --color-coral-ink: var(--coral-ink);
+  --color-coral-tint: var(--coral-tint);
+
+  --color-course-clay: var(--course-clay);
+  --color-course-clay-ink: var(--course-clay-ink);
+  --color-course-moss: var(--course-moss);
+  --color-course-moss-ink: var(--course-moss-ink);
+  --color-course-slate: var(--course-slate);
+  --color-course-slate-ink: var(--course-slate-ink);
+  --color-course-sand: var(--course-sand);
+  --color-course-sand-ink: var(--course-sand-ink);
+  --color-course-rose: var(--course-rose);
+  --color-course-rose-ink: var(--course-rose-ink);
+  --color-course-iris: var(--course-iris);
+  --color-course-iris-ink: var(--course-iris-ink);
+
+  --font-sans: var(--font-space-grotesk), "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-plex-mono), "IBM Plex Mono", ui-monospace, "SFMono-Regular", monospace;
+
+  --text-label: 0.6875rem;
+  --text-label--line-height: 1.2;
+  --text-meta: 0.75rem;
+  --text-meta--line-height: 1.35;
+  --text-body: 0.9375rem;
+  --text-body--line-height: 1.55;
+  --text-lead: 1.0625rem;
+  --text-lead--line-height: 1.5;
+  --text-title: 1.625rem;
+  --text-title--line-height: 1.1;
+  --text-figure: 2rem;
+  --text-figure--line-height: 1;
+  --text-display: clamp(2.25rem, 1.5rem + 3.3vw, 3.75rem);
+  --text-display--line-height: 0.98;
+
+  --radius-mark: 2px;
+  --radius-sheet: 3px;
+
+  --shadow-sheet: 0 1px 0 rgb(26 24 21 / 0.05), 0 18px 40px -32px rgb(26 24 21 / 0.45);
+  --shadow-row: 0 1px 0 rgb(26 24 21 / 0.04);
+
+  --ease-ledger: cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+/* ------------------------------------------------------------------ *
+ * Base
+ * ------------------------------------------------------------------ */
+@layer base {
+  html {
+    color-scheme: light;
+    background-color: var(--paper);
+    scrollbar-gutter: stable;
+  }
+
+  body {
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-size: var(--text-body);
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  ::selection {
+    background-color: var(--green-tint);
+    color: var(--green-deep);
+  }
+
+  :where(a, button, input, label, [tabindex]):focus-visible {
+    outline: 2px solid var(--green);
+    outline-offset: 2px;
+    border-radius: var(--radius-mark);
+  }
+
+  /* Sunken track behind the credit band reads as a ledger rule, not a widget. */
+  input[type="search"]::-webkit-search-cancel-button {
+    -webkit-appearance: none;
+  }
+}
+
+@utility mono-label {
+  font-family: var(--font-mono);
+  font-size: var(--text-label);
+  line-height: 1.2;
+  font-weight: 400;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+@utility tabular {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+@utility ledger-rules {
+  background-image: repeating-linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--ink) 3.5%, transparent) 0 1px,
+    transparent 1px 32px
+  );
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
