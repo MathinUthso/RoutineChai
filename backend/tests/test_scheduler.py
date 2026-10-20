@@ -1,0 +1,787 @@
+"""Acceptance tests for ``app.services.scheduler.generate`` (public API only).
+
+Schema under test (see ``tests/fixtures/*.json``):
+  catalog: term / programs / generated_at / source / courses
+  course:  code / title / credits / programs / kind / sections
+  section: name / if_required / faculty{name,initials} / meetings[{day,start,end,room}]
+  request: program / courses[{code,allowed_sections?,preferred_faculty?}] /
+           constraints{blocked,max_sessions_per_day,allowed_days,
+                       time_preference,preferred_off_days} / limit
+
+Every expected value below is derived from the fixture catalog or from the
+scheduler contract, never from the implementation.
+"""
+
+from __future__ import annotations
+
+import json
+import random
+import re
+import time
+
+import pytest
+
+from app.services.scheduler import generate
+
+ALL_DAYS = ["Sat", "Sun", "Mon", "Tue", "Wed"]
+DAY_SET = set(ALL_DAYS)
+BSCSE = "BSCSE"
+BSDS = "BSDS"
+COURSE_CODE = re.compile(r"^[A-Z]{2,4} \d{4}$")
+_MISSING = object()
+
+
+# --------------------------------------------------------------------------- #
+# result helpers (tolerant to pydantic models and plain dicts only)
+# --------------------------------------------------------------------------- #
+def _attr(obj, name, default=_MISSING):
+    if isinstance(obj, dict):
+        value = obj.get(name, _MISSING)
+    else:
+        value = getattr(obj, name, _MISSING)
+    if value is _MISSING:
+        if default is _MISSING:
+            raise AssertionError(f"missing attribute {name!r} on {obj!r}")
+        return default
+    return value
+
+
+def _minutes(value) -> int:
+    if hasattr(value, "hour") and hasattr(value, "minute"):
+        return int(value.hour) * 60 + int(value.minute)
+    if isinstance(value, str):
+        hours, _, minutes = value.partition(":")
+        return int(hours) * 60 + int(minutes)
+    if isinstance(value, int) and not isinstance(value, bool):
+        return value
+    raise AssertionError(f"unrecognized time value: {value!r}")
+
+
+def _enum_text(value) -> str:
+    return str(getattr(value, "value", value)).lower()
+
+
+def routines(result) -> list:
+    return list(_attr(result, "routines"))
+
+
+def courses_of(routine) -> list:
+    return list(_attr(routine, "courses"))
+
+
+def course_code(course) -> str:
+    return str(_attr(course, "code"))
+
+
+def section_name(course) -> str:
+    for attr in ("section", "section_name", "name"):
+        value = _attr(course, attr, None)
+        if value:
+            return str(value)
+    raise AssertionError(f"course {course!r} exposes no section identifier")
+
+
+def score_of(routine) -> float:
+    return float(_attr(routine, "score"))
+
+
+def scores(result) -> list[float]:
+    return [score_of(routine) for routine in routines(result)]
+
+
+def diagnostics(result) -> list:
+    value = _attr(result, "diagnostics", [])
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return [value] if value else []
+    return list(value)
+
+
+def excluded_courses(result) -> dict[str, set[str]]:
+    """Map diagnostic reason -> course codes reported as excluded."""
+    found: dict[str, set[str]] = {}
+    for diagnostic in diagnostics(result):
+        reason = _enum_text(_attr(diagnostic, "reason"))
+        codes = {
+            str(code)
+            for code in _attr(diagnostic, "courses_without_candidates", [])
+        }
+        found.setdefault(reason, set()).update(codes)
+    return found
+
+
+def routine_meetings(routine) -> list[tuple[str, int, int]]:
+    found: list[tuple[str, int, int]] = []
+    for course in courses_of(routine):
+        for meeting in _attr(course, "meetings"):
+            day = _attr(meeting, "day", None)
+            assert day, f"meeting {meeting!r} exposes no 'day'; schema is one day per meeting"
+            found.append(
+                (
+                    str(day),
+                    _minutes(_attr(meeting, "start")),
+                    _minutes(_attr(meeting, "end")),
+                )
+            )
+    return found
+
+
+def section_keys(routine) -> tuple[tuple[str, str], ...]:
+    return tuple(sorted((course_code(c), section_name(c)) for c in courses_of(routine)))
+
+
+def per_day_sessions(meetings) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for day, _start, _end in meetings:
+        counts[day] = counts.get(day, 0) + 1
+    return counts
+
+
+def gap_minutes(meetings) -> int:
+    by_day: dict[str, list[tuple[int, int]]] = {}
+    for day, start, end in meetings:
+        by_day.setdefault(day, []).append((start, end))
+    total = 0
+    for intervals in by_day.values():
+        intervals.sort()
+        for (_prev_start, prev_end), (next_start, _next_end) in zip(intervals, intervals[1:]):
+            total += max(0, next_start - prev_end)
+    return total
+
+
+def overlaps(start_a: int, end_a: int, start_b: int, end_b: int) -> bool:
+    """Half-open intervals: touching endpoints do not overlap."""
+    return start_a < end_b and start_b < end_a
+
+
+def assert_no_conflicts(meetings) -> None:
+    by_day: dict[str, list[tuple[int, int]]] = {}
+    for day, start, end in meetings:
+        assert end > start, f"meeting {day} {start}-{end} has non-positive duration"
+        by_day.setdefault(day, []).append((start, end))
+    for day, intervals in by_day.items():
+        intervals.sort()
+        for (start_a, end_a), (start_b, end_b) in zip(intervals, intervals[1:]):
+            assert start_b >= end_a, (
+                f"overlapping meetings on {day}: {start_a}-{end_a} / {start_b}-{end_b}"
+            )
+
+
+def hhmm(minutes: int) -> str:
+    return f"{minutes // 60:02d}:{minutes % 60:02d}"
+# --------------------------------------------------------------------------- #
+# synthetic catalog builders (same schema as the fixtures)
+# --------------------------------------------------------------------------- #
+FACULTY_NAMES = {"AR": "Amina Rahman", "TA": "Tanvir Ahmed"}
+
+
+def _meeting(day, start, end, room="R1"):
+    return {"day": day, "start": start, "end": end, "room": room}
+
+
+def _section(name, initials, meetings, if_required=False):
+    return {
+        "name": name,
+        "if_required": if_required,
+        "faculty": {"name": FACULTY_NAMES[initials], "initials": initials},
+        "meetings": list(meetings),
+    }
+
+
+def _course(code, title, credits, kind, sections, programs=(BSCSE,)):
+    return {
+        "code": code,
+        "title": title,
+        "credits": credits,
+        "programs": list(programs),
+        "kind": kind,
+        "sections": list(sections),
+    }
+
+
+def _catalog(*courses):
+    return {
+        "term": "Fall 2026",
+        "programs": [BSCSE, BSDS],
+        "generated_at": "2026-10-21T00:00:00+06:00",
+        "source": "test",
+        "courses": list(courses),
+    }
+
+
+def _request(
+    program,
+    courses,
+    *,
+    blocked=(),
+    max_sessions_per_day=3,
+    allowed_days=None,
+    time_preference="any",
+    limit=10,
+):
+    return {
+        "program": program,
+        "courses": list(courses),
+        "constraints": {
+            "blocked": list(blocked),
+            "max_sessions_per_day": max_sessions_per_day,
+            "allowed_days": list(ALL_DAYS if allowed_days is None else allowed_days),
+            "time_preference": time_preference,
+            "preferred_off_days": [],
+        },
+        "limit": limit,
+    }
+
+
+def _offered_sections(catalog_payload, program):
+    offered: dict[str, list[str]] = {}
+    for course in catalog_payload["courses"]:
+        if program not in course["programs"]:
+            continue
+        names = [s["name"] for s in course["sections"] if not s["if_required"]]
+        if names:
+            offered[course["code"]] = names
+    return offered
+
+
+# --------------------------------------------------------------------------- #
+# fixture contract
+# --------------------------------------------------------------------------- #
+def test_fixture_catalog_matches_agreed_schema(catalog_payload) -> None:
+    assert catalog_payload["term"] == "Fall 2026"
+    assert catalog_payload["source"] == "fixture"
+    assert catalog_payload["generated_at"] == "2026-10-21T00:00:00+06:00"
+    assert set(catalog_payload["programs"]) == {BSCSE, BSDS}
+
+    courses = catalog_payload["courses"]
+    assert len(courses) == 6
+    codes = [course["code"] for course in courses]
+    assert len(set(codes)) == len(codes), f"duplicate course codes: {codes}"
+    assert sum(1 for course in courses if course["kind"] == "lab") >= 1
+    assert sum(1 for course in courses if len(course["sections"]) == 1) == 1
+    assert sum(
+        1 for course in courses for section in course["sections"] if section["if_required"]
+    ) == 1
+
+    for course in courses:
+        assert COURSE_CODE.match(course["code"]), f"bad course code {course['code']!r}"
+        assert 1 <= course["credits"] <= 3, f"{course['code']} credits out of range"
+        assert course["kind"] in {"theory", "lab"}, f"{course['code']} bad kind"
+        assert set(course["programs"]) <= {BSCSE, BSDS}
+        assert 1 <= len(course["sections"]) <= 3
+        for section in course["sections"]:
+            assert section["faculty"]["name"]
+            assert section["faculty"]["initials"]
+            meetings = section["meetings"]
+            assert len(meetings) == (2 if course["kind"] == "theory" else 1), (
+                f"{course['code']}/{section['name']}: theory has two meetings, labs one"
+            )
+            for meeting in meetings:
+                assert set(meeting) == {"day", "start", "end", "room"}
+                assert meeting["day"] in DAY_SET
+                start = _minutes(meeting["start"])
+                end = _minutes(meeting["end"])
+                assert 8 * 60 <= start < end <= 20 * 60
+
+    initials = {
+        section["faculty"]["initials"]
+        for course in courses
+        for section in course["sections"]
+    }
+    assert len(initials) == 2, f"fixture should use two faculty, got {sorted(initials)}"
+
+
+def test_fixture_requests_match_agreed_schema(catalog_payload, request_payloads, make_request) -> None:
+    offered = {course["code"]: course for course in catalog_payload["courses"]}
+    for name, payload in request_payloads.items():
+        request = make_request(payload)
+        program = getattr(_attr(request, "program"), "value", _attr(request, "program"))
+        assert str(program).upper() in {BSCSE, BSDS}, name
+        assert int(_attr(request, "limit")) >= 1, name
+
+        constraints = _attr(request, "constraints")
+        assert int(_attr(constraints, "max_sessions_per_day")) >= 1, name
+        allowed_days = {str(day) for day in _attr(constraints, "allowed_days")}
+        assert allowed_days <= DAY_SET, f"{name}: bad allowed_days {allowed_days}"
+        assert _enum_text(_attr(constraints, "time_preference")) in {
+            "morning",
+            "afternoon",
+            "any",
+        }, name
+        for block in _attr(constraints, "blocked"):
+            assert str(_attr(block, "day")) in DAY_SET, name
+            assert _minutes(_attr(block, "start")) < _minutes(_attr(block, "end")), name
+
+        requested = list(_attr(request, "courses"))
+        assert requested, f"{name}: no courses requested"
+        for item in requested:
+            code = str(_attr(item, "code"))
+            assert code in offered, f"{name}: unknown course {code}"
+            allowed_sections = _attr(item, "allowed_sections", None)
+            if allowed_sections:
+                known = {section["name"] for section in offered[code]["sections"]}
+                assert set(map(str, allowed_sections)) <= known, (
+                    f"{name}: {code} allowed_sections {allowed_sections} not in {sorted(known)}"
+                )
+
+
+# --------------------------------------------------------------------------- #
+# hard constraints
+# --------------------------------------------------------------------------- #
+def test_each_requested_course_gets_exactly_one_section(catalog, request_payload, make_request) -> None:
+    result = generate(catalog, make_request(request_payload("full_bscse")))
+
+    assert routines(result), "the full BSCSE fixture request is feasible"
+    expected = {"CSE 1111", "CSE 1112", "CSE 2213", "MATH 1151"}
+    for routine in routines(result):
+        codes = [course_code(course) for course in courses_of(routine)]
+        assert len(codes) == len(set(codes)), f"duplicate course codes in routine: {codes}"
+        assert set(codes) == expected, f"missing or extra courses: {set(codes) ^ expected}"
+        for course in courses_of(routine):
+            assert section_name(course)
+            assert _attr(course, "meetings")
+
+
+def test_routines_have_no_same_day_overlaps(catalog, request_payload, make_request) -> None:
+    result = generate(catalog, make_request(request_payload("full_bscse")))
+
+    assert routines(result)
+    for routine in routines(result):
+        meetings = routine_meetings(routine)
+        assert_no_conflicts(meetings)
+        counts = per_day_sessions(meetings)
+        assert max(counts.values()) <= 3, f"request caps sessions at 3 per day: {counts}"
+
+
+def test_adjacent_meetings_are_allowed(catalog, request_payload, make_request) -> None:
+    result = generate(catalog, make_request(request_payload("adjacent_2213_2218")))
+
+    assert routines(result), "Sun 10:00-11:20 and Sun 11:20-13:20 are adjacent, not overlapping"
+    assert len(routines(result)) == 1
+    routine = routines(result)[0]
+    assert section_keys(routine) == (("CSE 2213", "A"), ("CSE 2218", "A"))
+    meetings = routine_meetings(routine)
+    assert ("Sun", 10 * 60, 11 * 60 + 20) in meetings
+    assert ("Sun", 11 * 60 + 20, 13 * 60 + 20) in meetings
+    assert_no_conflicts(meetings)
+
+
+def test_lab_lecture_overlap_is_rejected(catalog, request_payload, make_request) -> None:
+    result = generate(catalog, make_request(request_payload("overlap_lab_lecture")))
+
+    assert not routines(result), "Sun 11:20-13:20 lab overlaps Sun 11:30-12:50 lecture"
+    assert diagnostics(result), "infeasible request must explain why"
+
+
+def test_lecture_lecture_overlap_is_rejected(catalog, request_payload, make_request) -> None:
+    result = generate(catalog, make_request(request_payload("overlap_lecture_lecture")))
+
+    assert not routines(result), "both sections meet Wed 11:30-12:50"
+    assert diagnostics(result)
+
+
+def test_blocked_exact_time_excludes_section(catalog, request_payload, make_request) -> None:
+    result = generate(catalog, make_request(request_payload("blocked_exact_cse1111")))
+
+    assert routines(result)
+    for routine in routines(result):
+        assert section_keys(routine) == (("CSE 1111", "B"),)
+
+
+def test_blocked_partial_overlap_excludes_section(catalog, request_payload, make_request) -> None:
+    result = generate(catalog, make_request(request_payload("blocked_partial_cse1111")))
+
+    assert routines(result)
+    for routine in routines(result):
+        assert section_keys(routine) == (("CSE 1111", "B"),)
+
+
+def test_blocked_adjacent_interval_does_not_exclude(catalog, request_payload, make_request) -> None:
+    result = generate(catalog, make_request(request_payload("blocked_adjacent_cse1111")))
+
+    assert routines(result), "08:00-08:30 and 09:50-10:30 touch but do not overlap 08:30-09:50"
+    for routine in routines(result):
+        assert section_keys(routine) == (("CSE 1111", "A"),)
+        assert ("Sat", 8 * 60 + 30, 9 * 60 + 50) in routine_meetings(routine)
+
+
+def test_max_sessions_per_day_is_enforced(catalog, request_payload, make_request) -> None:
+    result = generate(catalog, make_request(request_payload("max_two_per_day")))
+
+    assert routines(result)
+    for routine in routines(result):
+        counts = per_day_sessions(routine_meetings(routine))
+        assert max(counts.values()) <= 2, f"per-day sessions exceed cap: {counts}"
+        assert ("CSE 1112", "B") in section_keys(routine), (
+            "CSE 1112 section A adds a third Saturday session, so the cap must select B"
+        )
+
+
+def test_max_sessions_per_day_can_make_request_infeasible(catalog, request_payload, make_request) -> None:
+    result = generate(catalog, make_request(request_payload("max_one_per_day")))
+
+    assert not routines(result), "both courses meet Sat and Tue, so one session/day is impossible"
+    assert diagnostics(result)
+
+
+def test_allowed_days_excludes_other_days(catalog, request_payload, make_request) -> None:
+    result = generate(catalog, make_request(request_payload("allowed_days_mon_wed")))
+
+    assert not routines(result), "CSE 2213 only meets Sun and Wed, so Mon/Wed is infeasible"
+    assert diagnostics(result)
+
+
+def test_allowed_days_permits_full_set(catalog, request_payload, make_request) -> None:
+    result = generate(catalog, make_request(request_payload("allowed_days_mon_wed_sun")))
+
+    assert routines(result)
+    for routine in routines(result):
+        days = {day for day, _start, _end in routine_meetings(routine)}
+        assert days <= {"Sun", "Mon", "Wed"}
+        assert {course_code(course) for course in courses_of(routine)} == {"CSE 2213", "CSE 2217"}
+def test_program_filter_excludes_course_from_other_program(catalog, request_payload, make_request) -> None:
+    result = generate(catalog, make_request(request_payload("bsds_mixed")))
+
+    assert routines(result), "MATH 1151 is offered to BSDS"
+    for routine in routines(result):
+        codes = {course_code(course) for course in courses_of(routine)}
+        assert "CSE 1111" not in codes, "CSE 1111 is BSCSE-only and must not be offered to BSDS"
+        assert codes == {"MATH 1151"}, "the BSDS-offered course must still generate a routine"
+
+    excluded = excluded_courses(result)
+    reported = excluded.get("courses_without_candidates", set())
+    assert "CSE 1111" in reported, (
+        f"program-filtered course must be reported as excluded, got {excluded}"
+    )
+    assert "MATH 1151" not in reported, (
+        f"an offered course must not be reported as excluded, got {excluded}"
+    )
+
+
+def test_program_filter_diagnostic_survives_no_solution(catalog, make_request) -> None:
+    request = _request(
+        BSDS,
+        [{"code": "CSE 1111"}, {"code": "MATH 1151"}],
+        allowed_days=("Sun", "Mon", "Wed"),
+    )
+
+    result = generate(catalog, make_request(request))
+
+    assert routines(result) == []
+    reported = excluded_courses(result).get("courses_without_candidates", set())
+    assert "CSE 1111" in reported, "program-excluded course must stay in diagnostics"
+    assert "MATH 1151" in reported, "course with no remaining sections must be reported"
+
+
+def test_program_filter_allows_bsds_course(catalog, request_payload, make_request) -> None:
+    result = generate(catalog, make_request(request_payload("bsds_db_only")))
+
+    assert routines(result), "CSE 2217 is offered to BSDS"
+    for routine in routines(result):
+        assert {course_code(course) for course in courses_of(routine)} == {"CSE 2217"}
+
+
+def test_if_required_section_is_hidden_by_default(catalog, request_payload, make_request) -> None:
+    offered = generate(catalog, make_request(request_payload("cse2217_default")))
+    assert routines(offered)
+    for routine in routines(offered):
+        assert section_name(courses_of(routine)[0]) in {"A", "B"}
+
+    only_hidden_left = generate(catalog, make_request(request_payload("cse2217_blocked_ab")))
+    assert not routines(only_hidden_left), (
+        "CSE 2217 section C is if_required; blocking A and B must not surface it"
+    )
+    assert diagnostics(only_hidden_left)
+
+
+def test_pinned_section_identity_is_preserved(make_catalog, make_request) -> None:
+    meetings = [
+        _meeting("Sat", "08:30", "09:50"),
+        _meeting("Tue", "08:30", "09:50"),
+    ]
+    catalog_payload = _catalog(
+        _course(
+            "TST 1004",
+            "Pinned Section",
+            3,
+            "theory",
+            [
+                _section("A", "AR", meetings),
+                _section("B", "AR", meetings),
+            ],
+        )
+    )
+    result = generate(
+        make_catalog(catalog_payload),
+        make_request(
+            _request(BSCSE, [{"code": "TST 1004", "allowed_sections": ["B"]}])
+        ),
+    )
+
+    assert routines(result), "section B is feasible and explicitly requested"
+    for routine in routines(result):
+        assert section_keys(routine) == (("TST 1004", "B"),), (
+            "pinned section B must keep its identity instead of collapsing to A"
+        )
+
+
+# --------------------------------------------------------------------------- #
+# soft preferences
+# --------------------------------------------------------------------------- #
+def test_morning_preference_ranks_morning_first(catalog, request_payload, make_request) -> None:
+    result = generate(catalog, make_request(request_payload("morning_cse1111")))
+
+    assert routines(result)
+    assert section_name(courses_of(routines(result)[0])[0]) == "A"
+    assert ("Sat", 8 * 60 + 30, 9 * 60 + 50) in routine_meetings(routines(result)[0])
+
+
+def test_afternoon_preference_flips_ranking(catalog, request_payload, make_request) -> None:
+    morning = generate(catalog, make_request(request_payload("morning_cse1111")))
+    afternoon = generate(catalog, make_request(request_payload("afternoon_cse1111")))
+
+    assert routines(morning) and routines(afternoon)
+    assert section_name(courses_of(routines(morning)[0])[0]) == "A"
+    assert section_name(courses_of(routines(afternoon)[0])[0]) == "B"
+
+
+@pytest.mark.parametrize(("initials", "expected"), [("AR", "A"), ("TA", "B")])
+def test_preferred_faculty_ranks_matching_section_first(
+    initials, expected, catalog, request_payload, make_request
+) -> None:
+    payload = request_payload("cse1111_only")
+    payload["courses"][0]["preferred_faculty"] = [initials]
+    result = generate(catalog, make_request(payload))
+
+    assert routines(result)
+    assert section_name(courses_of(routines(result)[0])[0]) == expected, (
+        f"preferred faculty {initials} should rank section {expected} first"
+    )
+
+
+def test_compactness_prefers_gapless_routine(make_catalog, make_request) -> None:
+    catalog_payload = _catalog(
+        _course(
+            "TST 1001",
+            "Compactness One",
+            3,
+            "theory",
+            [
+                _section("A", "AR", [_meeting("Mon", "08:30", "09:50"), _meeting("Wed", "08:30", "09:50")]),
+                _section("B", "AR", [_meeting("Mon", "08:30", "09:50"), _meeting("Wed", "13:30", "15:30")]),
+            ],
+        ),
+        _course(
+            "TST 1002",
+            "Compactness Two",
+            3,
+            "theory",
+            [
+                _section("A", "TA", [_meeting("Mon", "10:00", "11:20"), _meeting("Wed", "10:00", "11:20")]),
+                _section("B", "TA", [_meeting("Mon", "14:00", "15:20"), _meeting("Wed", "14:00", "15:20")]),
+            ],
+        ),
+    )
+    result = generate(
+        make_catalog(catalog_payload),
+        make_request(
+            _request(BSCSE, [{"code": "TST 1001"}, {"code": "TST 1002"}])
+        ),
+    )
+
+    assert routines(result)
+    gaps = [gap_minutes(routine_meetings(routine)) for routine in routines(result)]
+    assert gaps[0] == 20, f"gapless combo has two 10-minute gaps, got {gaps}"
+    assert min(gaps) == gaps[0]
+    assert section_keys(routines(result)[0]) == (("TST 1001", "A"), ("TST 1002", "A"))
+
+
+def test_fewer_days_prefers_single_day_routine(make_catalog, make_request) -> None:
+    catalog_payload = _catalog(
+        _course(
+            "TST 1003",
+            "Days Tradeoff",
+            3,
+            "theory",
+            [
+                _section("A", "AR", [_meeting("Sat", "08:30", "09:50"), _meeting("Sun", "08:30", "09:50")]),
+                _section("B", "AR", [_meeting("Sat", "08:30", "09:50"), _meeting("Sat", "09:50", "11:20")]),
+            ],
+        )
+    )
+    result = generate(
+        make_catalog(catalog_payload),
+        make_request(_request(BSCSE, [{"code": "TST 1003"}], limit=5)),
+    )
+
+    assert routines(result)
+    top = routines(result)[0]
+    assert {day for day, _start, _end in routine_meetings(top)} == {"Sat"}
+    assert section_name(courses_of(top)[0]) == "B"
+    seen_sections = {
+        section_name(course) for routine in routines(result) for course in courses_of(routine)
+    }
+    assert seen_sections == {"A", "B"}, "both one-day and two-day sections are feasible"
+
+
+# --------------------------------------------------------------------------- #
+# top N
+# --------------------------------------------------------------------------- #
+def test_limit_truncates_and_sorts(catalog, request_payload, make_request) -> None:
+    result = generate(catalog, make_request(request_payload("full_bscse", limit=2)))
+
+    assert len(routines(result)) == 2
+    assert _attr(result, "truncated") is True, "the fixture catalog holds more than two routines"
+    assert scores(result) == sorted(scores(result), reverse=True)
+
+    keys = [section_keys(routine) for routine in routines(result)]
+    assert len(set(keys)) == len(keys), f"duplicate section tuple returned: {keys}"
+
+
+def test_result_has_no_duplicate_section_tuples(catalog, request_payload, make_request) -> None:
+    result = generate(catalog, make_request(request_payload("full_bscse")))
+
+    assert len(routines(result)) >= 3
+    assert len(routines(result)) <= 10
+    keys = [section_keys(routine) for routine in routines(result)]
+    assert len(set(keys)) == len(keys), f"duplicate section tuple returned: {keys}"
+    assert scores(result) == sorted(scores(result), reverse=True)
+
+
+def test_truncated_is_false_when_limit_is_large(catalog, request_payload, make_request) -> None:
+    result = generate(catalog, make_request(request_payload("full_bscse", limit=50)))
+
+    assert routines(result)
+    assert _attr(result, "truncated") is False, "every feasible routine fits inside limit=50"
+
+
+def test_generate_is_deterministic(catalog, catalog_payload, request_payload, make_catalog, make_request) -> None:
+    payload = request_payload("full_bscse")
+    first = generate(catalog, make_request(payload))
+    second = generate(make_catalog(catalog_payload), make_request(payload))
+
+    def fingerprint(result):
+        return [
+            (score_of(routine), section_keys(routine), routine_meetings(routine))
+            for routine in routines(result)
+        ]
+
+    assert fingerprint(first) == fingerprint(second)
+
+
+def test_no_solution_returns_diagnostics(catalog, request_payload, make_request) -> None:
+    result = generate(catalog, make_request(request_payload("overlap_lab_lecture")))
+
+    assert routines(result) == []
+    assert diagnostics(result), "diagnostics must explain an empty result"
+    assert isinstance(_attr(result, "truncated"), bool)
+
+
+# --------------------------------------------------------------------------- #
+# randomized validity + performance
+# --------------------------------------------------------------------------- #
+def test_randomized_requests_are_always_valid(catalog, catalog_payload, make_request) -> None:
+    offered = _offered_sections(catalog_payload, BSCSE)
+    codes = sorted(offered)
+    assert len(codes) >= 4, "fixture needs enough courses for randomized coverage"
+
+    feasible = 0
+    for seed in range(60):
+        rng = random.Random(seed)
+
+        chosen = []
+        allowed_by_code: dict[str, set[str]] = {}
+        # 2-4 courses keeps overlap/cap/days constraints in play without making
+        # most draws unsatisfiable.
+        for code in rng.sample(codes, rng.randint(2, min(4, len(codes)))):
+            names = offered[code]
+            # Keep at least two sections selectable whenever the course offers
+            # them, so a conflict can be resolved instead of forcing infeasibility.
+            count = rng.randint(min(2, len(names)), len(names))
+            allowed = sorted(rng.sample(names, count))
+            chosen.append({"code": code, "allowed_sections": allowed})
+            allowed_by_code[code] = set(allowed)
+
+        blocked = []
+        for _ in range(rng.randint(0, 2)):
+            start = rng.randrange(8 * 60, 16 * 60 + 1, 30)
+            end = start + rng.choice([60, 90, 120])
+            blocked.append({"day": rng.choice(ALL_DAYS), "start": hhmm(start), "end": hhmm(end)})
+
+        # 4-5 allowed days: still excludes a real day (and the Sun-only lab when
+        # Sun is dropped) but keeps a healthy feasible sample.
+        allowed_days = rng.sample(ALL_DAYS, rng.randint(4, len(ALL_DAYS)))
+        max_sessions = rng.randint(2, 3)
+        limit = rng.randint(2, 6)
+
+        payload = _request(
+            BSCSE,
+            chosen,
+            blocked=blocked,
+            max_sessions_per_day=max_sessions,
+            allowed_days=allowed_days,
+            time_preference=rng.choice(["morning", "afternoon", "any"]),
+            limit=limit,
+        )
+        result = generate(catalog, make_request(payload))
+        assert isinstance(_attr(result, "truncated"), bool), f"seed {seed}"
+
+        returned = routines(result)
+        assert len(returned) <= limit, f"seed {seed}: limit exceeded"
+        if not returned:
+            assert diagnostics(result), f"seed {seed}: empty result without diagnostics"
+            continue
+
+        feasible += 1
+        assert scores(result) == sorted(scores(result), reverse=True), f"seed {seed}: not sorted"
+
+        seen = set()
+        for routine in returned:
+            keys = section_keys(routine)
+            assert keys not in seen, f"seed {seed}: duplicate section tuple {keys}"
+            seen.add(keys)
+
+            meetings = routine_meetings(routine)
+            assert_no_conflicts(meetings)
+
+            days = {day for day, _start, _end in meetings}
+            assert days <= set(allowed_days), f"seed {seed}: disallowed days {days - set(allowed_days)}"
+
+            counts = per_day_sessions(meetings)
+            assert max(counts.values()) <= max_sessions, (
+                f"seed {seed}: per-day sessions {counts} exceed cap {max_sessions}"
+            )
+
+            routine_codes = [course_code(course) for course in courses_of(routine)]
+            assert len(set(routine_codes)) == len(routine_codes), f"seed {seed}: duplicate course"
+            for course in courses_of(routine):
+                code = course_code(course)
+                assert code in allowed_by_code, f"seed {seed}: unrequested course {code}"
+                assert section_name(course) in allowed_by_code[code], (
+                    f"seed {seed}: section {code}/{section_name(course)} not allowed"
+                )
+
+            for day, start, end in meetings:
+                for block in blocked:
+                    if block["day"] != day:
+                        continue
+                    assert not overlaps(
+                        start, end, _minutes(block["start"]), _minutes(block["end"])
+                    ), (
+                        f"seed {seed}: meeting {day} {hhmm(start)}-{hhmm(end)} hits blocked "
+                        f"{block['start']}-{block['end']}"
+                    )
+
+    assert feasible >= 20, f"only {feasible}/60 randomized requests were feasible"
+
+
+def test_generate_is_fast_on_fixture_catalog(catalog, request_payload, make_request) -> None:
+    request = make_request(request_payload("full_bscse"))
+
+    started = time.perf_counter()
+    result = generate(catalog, request)
+    elapsed = time.perf_counter() - started
+
+    assert routines(result)
+    assert elapsed < 3.0, f"generate took {elapsed:.2f}s on the 6-course fixture catalog"

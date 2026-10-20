@@ -1,0 +1,176 @@
+{
+  "term": "Fall 2026",
+  "programs": ["BSCSE", "BSDS"],
+  "generated_at": "2026-10-21T00:00:00+06:00",
+  "source": "fixture",
+  "courses": [
+    {
+      "code": "CSE 1111",
+      "title": "Structured Programming Language",
+      "credits": 3,
+      "programs": ["BSCSE"],
+      "kind": "theory",
+      "sections": [
+        {
+          "name": "A",
+          "if_required": false,
+          "faculty": {"name": "Amina Rahman", "initials": "AR"},
+          "meetings": [
+            {"day": "Sat", "start": "08:30", "end": "09:50", "room": "304"},
+            {"day": "Tue", "start": "08:30", "end": "09:50", "room": "304"}
+          ]
+        },
+        {
+          "name": "B",
+          "if_required": false,
+          "faculty": {"name": "Tanvir Ahmed", "initials": "TA"},
+          "meetings": [
+            {"day": "Sat", "start": "14:00", "end": "15:20", "room": "402"},
+            {"day": "Tue", "start": "14:00", "end": "15:20", "room": "402"}
+          ]
+        }
+      ]
+    },
+    {
+      "code": "CSE 1112",
+      "title": "Structured Programming Language Lab",
+      "credits": 1,
+      "programs": ["BSCSE"],
+      "kind": "lab",
+      "sections": [
+        {
+          "name": "A",
+          "if_required": false,
+          "faculty": {"name": "Amina Rahman", "initials": "AR"},
+          "meetings": [
+            {"day": "Sat", "start": "13:30", "end": "15:30", "room": "Lab 1"}
+          ]
+        },
+        {
+          "name": "B",
+          "if_required": false,
+          "faculty": {"name": "Tanvir Ahmed", "initials": "TA"},
+          "meetings": [
+            {"day": "Wed", "start": "13:30", "end": "15:30", "room": "Lab 3"}
+          ]
+        }
+      ]
+    },
+    {
+      "code": "CSE 2213",
+      "title": "Data Structures",
+      "credits": 3,
+      "programs": ["BSCSE"],
+      "kind": "theory",
+      "sections": [
+        {
+          "name": "A",
+          "if_required": false,
+          "faculty": {"name": "Amina Rahman", "initials": "AR"},
+          "meetings": [
+            {"day": "Sun", "start": "10:00", "end": "11:20", "room": "201"},
+            {"day": "Wed", "start": "10:00", "end": "11:20", "room": "201"}
+          ]
+        },
+        {
+          "name": "B",
+          "if_required": false,
+          "faculty": {"name": "Amina Rahman", "initials": "AR"},
+          "meetings": [
+            {"day": "Sun", "start": "11:30", "end": "12:50", "room": "201"},
+            {"day": "Wed", "start": "11:30", "end": "12:50", "room": "201"}
+          ]
+        },
+        {
+          "name": "C",
+          "if_required": false,
+          "faculty": {"name": "Tanvir Ahmed", "initials": "TA"},
+          "meetings": [
+            {"day": "Sun", "start": "14:00", "end": "15:20", "room": "205"},
+            {"day": "Wed", "start": "14:00", "end": "15:20", "room": "205"}
+          ]
+        }
+      ]
+    },
+    {
+      "code": "MATH 1151",
+      "title": "Calculus and Analytical Geometry",
+      "credits": 3,
+      "programs": ["BSCSE", "BSDS"],
+      "kind": "theory",
+      "sections": [
+        {
+          "name": "A",
+          "if_required": false,
+          "faculty": {"name": "Amina Rahman", "initials": "AR"},
+          "meetings": [
+            {"day": "Sat", "start": "10:00", "end": "11:20", "room": "101"},
+            {"day": "Tue", "start": "10:00", "end": "11:20", "room": "101"}
+          ]
+        },
+        {
+          "name": "B",
+          "if_required": false,
+          "faculty": {"name": "Tanvir Ahmed", "initials": "TA"},
+          "meetings": [
+            {"day": "Sat", "start": "14:00", "end": "15:20", "room": "101"},
+            {"day": "Tue", "start": "14:00", "end": "15:20", "room": "101"}
+          ]
+        }
+      ]
+    },
+    {
+      "code": "CSE 2217",
+      "title": "Database Systems",
+      "credits": 3,
+      "programs": ["BSCSE", "BSDS"],
+      "kind": "theory",
+      "sections": [
+        {
+          "name": "A",
+          "if_required": false,
+          "faculty": {"name": "Tanvir Ahmed", "initials": "TA"},
+          "meetings": [
+            {"day": "Mon", "start": "08:30", "end": "09:50", "room": "306"},
+            {"day": "Wed", "start": "08:30", "end": "09:50", "room": "306"}
+          ]
+        },
+        {
+          "name": "B",
+          "if_required": false,
+          "faculty": {"name": "Amina Rahman", "initials": "AR"},
+          "meetings": [
+            {"day": "Mon", "start": "11:30", "end": "12:50", "room": "306"},
+            {"day": "Wed", "start": "11:30", "end": "12:50", "room": "306"}
+          ]
+        },
+        {
+          "name": "C",
+          "if_required": true,
+          "faculty": {"name": "Tanvir Ahmed", "initials": "TA"},
+          "meetings": [
+            {"day": "Mon", "start": "14:00", "end": "15:20", "room": "306"},
+            {"day": "Wed", "start": "14:00", "end": "15:20", "room": "306"}
+          ]
+        }
+      ]
+    },
+    {
+      "code": "CSE 2218",
+      "title": "Database Systems Lab",
+      "credits": 1,
+      "programs": ["BSCSE", "BSDS"],
+      "kind": "lab",
+      "sections": [
+        {
+          "name": "A",
+          "if_required": false,
+          "faculty": {"name": "Tanvir Ahmed", "initials": "TA"},
+          "meetings": [
+            {"day": "Sun", "start": "11:20", "end": "13:20", "room": "Lab 2"}
+          ]
+        }
+      ]
+    }
+  ]
+}

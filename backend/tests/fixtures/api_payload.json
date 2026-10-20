@@ -1,0 +1,31 @@
+{
+  "valid": {
+    "program": "BSCSE",
+    "courses": [
+      {"code": "CSE 1111", "allowed_sections": ["A"]},
+      {"code": "CSE 1112"},
+      {"code": "CSE 2213"},
+      {"code": "MATH 1151"}
+    ],
+    "constraints": {
+      "blocked": [],
+      "max_sessions_per_day": 3,
+      "allowed_days": ["Sat", "Sun", "Mon", "Tue", "Wed"],
+      "time_preference": "any",
+      "preferred_off_days": []
+    },
+    "limit": 5
+  },
+  "no_solution": {
+    "program": "BSCSE",
+    "courses": [{"code": "CSE 2213"}],
+    "constraints": {
+      "blocked": [],
+      "max_sessions_per_day": 3,
+      "allowed_days": ["Sat", "Mon"],
+      "time_preference": "any",
+      "preferred_off_days": []
+    },
+    "limit": 5
+  }
+}

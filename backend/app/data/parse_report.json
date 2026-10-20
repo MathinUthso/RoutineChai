@@ -1,0 +1,24 @@
+{
+  "term": "Fall 2026",
+  "source": "Class Routine with faculty assign Fall 2026.pdf",
+  "rows": 791,
+  "repaired": 303,
+  "skipped": 0,
+  "warnings": [
+    {
+      "sl": 436,
+      "page": 15,
+      "reason": "pdfium line truncated; repaired from primary row"
+    },
+    {
+      "sl": 723,
+      "page": 25,
+      "reason": "room missing; recorded as TBA"
+    },
+    {
+      "sl": 750,
+      "page": 26,
+      "reason": "faculty missing; recorded as TBA"
+    }
+  ]
+}
