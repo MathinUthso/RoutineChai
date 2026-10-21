@@ -244,13 +244,13 @@ The API and the UI are deployed separately: FastAPI on Render, Next.js on Vercel
 | Piece | URL |
 | --- | --- |
 | UI (Vercel) | https://routine-chai.vercel.app |
-| API (Render) | https://uiu-routine-api.onrender.com |
-| Health check | https://uiu-routine-api.onrender.com/health |
+| API (Render) | https://routinechai.onrender.com |
+| Health check | https://routinechai.onrender.com/health |
 
 ### Backend on Render
 
-`render.yaml` in the repo root is a Render Blueprint, so the service can be created from the
-repository without dashboard configuration.
+The API runs as a Render Web Service named `RoutineChai`, created from this repository with these
+settings:
 
 | Setting | Value |
 | --- | --- |
@@ -258,19 +258,21 @@ repository without dashboard configuration.
 | Build Command | `pip install -r requirements.txt` |
 | Start Command | `uvicorn app.main:app --host 0.0.0.0 --port $PORT` |
 | Health Check Path | `/health` |
+| Instance Type | Free |
+| Region | Singapore |
 
 Environment variables:
 
 - `ALLOWED_ORIGINS` — comma-separated browser origins allowed to call the API. Set it to the
-  Vercel URL, for example `https://routine-chai.vercel.app`.
+  Vercel origin, for example `https://routine-chai.vercel.app,http://localhost:3000`. Origins must
+  match exactly, with no trailing slash, no trailing dot, and no wildcard.
 - `PYTHON_VERSION` — `3.12`.
 
-Steps: connect the GitHub repository in Render, choose **New → Blueprint**, pick the repository,
-and accept the service defined in `render.yaml`. Render then deploys `https://<service>.onrender.com`.
+Render restarts the API when `ALLOWED_ORIGINS` changes.
 
 ### Frontend on Vercel
 
-Import the same repository in Vercel with:
+The UI is the Vercel project `routine-chai`, connected to this repository with:
 
 | Setting | Value |
 | --- | --- |
@@ -278,18 +280,16 @@ Import the same repository in Vercel with:
 | Framework Preset | Next.js |
 | Build Command | `npm run build` |
 | Install Command | `npm install` |
-| Node Version | 22.x |
 
-Set the environment variable `NEXT_PUBLIC_API_BASE_URL` to the Render URL, for example
-`https://<service>.onrender.com`, with no trailing slash. The value is inlined at build time, so
-redeploy the project after changing it. After the first Vercel deployment, copy the production URL
-back into the Render `ALLOWED_ORIGINS` variable; Render restarts the API when that value changes.
+Set the environment variable `NEXT_PUBLIC_API_BASE_URL` to the Render URL,
+`https://routinechai.onrender.com`, with no trailing slash. The value is inlined at build time, so
+redeploy the project after changing it.
 
 ### Verifying a deployment
 
 ```powershell
-curl https://<service>.onrender.com/health
-curl https://<service>.onrender.com/api/meta
+curl https://routinechai.onrender.com/health
+curl https://routinechai.onrender.com/api/meta
 ```
 
 Open the Vercel URL, confirm the catalog loads, and generate a routine. A CORS error in the
