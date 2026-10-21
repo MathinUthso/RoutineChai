@@ -221,6 +221,61 @@ frontend/
 doc/              Source registrar PDFs
 ```
 
+## Deployment
+
+The API and the UI are deployed separately: FastAPI on Render, Next.js on Vercel.
+
+### Backend on Render
+
+`render.yaml` in the repo root is a Render Blueprint, so the service can be created from the
+repository without dashboard configuration.
+
+| Setting | Value |
+| --- | --- |
+| Root Directory | `backend` |
+| Build Command | `pip install -r requirements.txt` |
+| Start Command | `uvicorn app.main:app --host 0.0.0.0 --port $PORT` |
+| Health Check Path | `/health` |
+
+Environment variables:
+
+- `ALLOWED_ORIGINS` — comma-separated browser origins allowed to call the API. Set it to the
+  Vercel URL, for example `https://routine-chai.vercel.app`.
+- `PYTHON_VERSION` — `3.12`.
+
+Steps: connect the GitHub repository in Render, choose **New → Blueprint**, pick the repository,
+and accept the service defined in `render.yaml`. Render then deploys `https://<service>.onrender.com`.
+
+### Frontend on Vercel
+
+Import the same repository in Vercel with:
+
+| Setting | Value |
+| --- | --- |
+| Root Directory | `frontend` |
+| Framework Preset | Next.js |
+| Build Command | `npm run build` |
+| Install Command | `npm install` |
+| Node Version | 22.x |
+
+Set the environment variable `NEXT_PUBLIC_API_BASE_URL` to the Render URL, for example
+`https://<service>.onrender.com`, with no trailing slash. The value is inlined at build time, so
+redeploy the project after changing it. After the first Vercel deployment, copy the production URL
+back into the Render `ALLOWED_ORIGINS` variable; Render restarts the API when that value changes.
+
+### Verifying a deployment
+
+```powershell
+curl https://<service>.onrender.com/health
+curl https://<service>.onrender.com/api/meta
+```
+
+Open the Vercel URL, confirm the catalog loads, and generate a routine. A CORS error in the
+browser console means `ALLOWED_ORIGINS` does not exactly match the Vercel origin.
+
+Render's free instances sleep after inactivity, so the first request can take a minute. Point a
+free cron job at `/health` every ten minutes if that is a problem.
+
 ## Verification
 
 Backend:
