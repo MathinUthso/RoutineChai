@@ -44,7 +44,7 @@ export function ConsentBanner({
         : "Details";
 
   return (
-    <div className="pointer-events-none fixed inset-x-0 bottom-0 z-50 flex justify-center px-3 pb-3 sm:inset-x-auto sm:bottom-4 sm:right-4 sm:justify-end sm:px-0 sm:pb-0">
+    <div className="pointer-events-none fixed inset-x-0 bottom-0 z-50 flex justify-center px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:inset-x-auto sm:bottom-4 sm:right-4 sm:justify-end sm:px-0 sm:pb-0">
       <motion.div
         layout={!reduceMotion}
         initial={reduceMotion ? false : { opacity: 0, y: 8 }}
@@ -67,7 +67,7 @@ export function ConsentBanner({
                   type="button"
                   onClick={() => setOpen(false)}
                   aria-label="Close details options"
-                  className="press -mr-1 -mt-1 grid h-8 w-8 place-items-center text-ink-faint hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-[3px] focus-visible:outline-coral"
+                  className="press -mr-1 -mt-1 grid h-8 w-8 place-items-center text-ink-faint hover:text-ink"
                 >
                   <CloseIcon className="h-4 w-4" />
                 </button>
@@ -92,7 +92,7 @@ export function ConsentBanner({
                         onForget();
                         setOpen(false);
                       }}
-                      className="press inline-flex min-h-9 items-center justify-center border border-rule px-3 text-[0.8125rem] text-ink-soft hover:border-coral hover:text-coral-ink focus-visible:outline-2 focus-visible:outline-offset-[3px] focus-visible:outline-coral"
+                      className="press inline-flex min-h-9 items-center justify-center border border-rule px-3 text-[0.8125rem] text-ink-soft hover:border-coral hover:text-coral-ink"
                     >
                       Forget Saved Details
                     </button>
@@ -104,7 +104,7 @@ export function ConsentBanner({
                         onAccept();
                         setOpen(false);
                       }}
-                      className="press inline-flex min-h-9 items-center justify-center border border-green bg-green px-3 text-[0.8125rem] font-medium text-paper hover:bg-green-deep focus-visible:outline-2 focus-visible:outline-offset-[3px] focus-visible:outline-coral"
+                      className="press inline-flex min-h-9 items-center justify-center border border-green bg-green px-3 text-[0.8125rem] font-medium text-paper hover:bg-green-deep"
                     >
                       Save My Details
                     </button>
@@ -131,14 +131,14 @@ export function ConsentBanner({
                   <button
                     type="button"
                     onClick={onAccept}
-                    className="press inline-flex min-h-9 items-center justify-center border border-green bg-green px-3 text-[0.8125rem] font-medium text-paper hover:bg-green-deep focus-visible:outline-2 focus-visible:outline-offset-[3px] focus-visible:outline-coral"
+                    className="press inline-flex min-h-9 items-center justify-center border border-green bg-green px-3 text-[0.8125rem] font-medium text-paper hover:bg-green-deep"
                   >
                     Save My Details
                   </button>
                   <button
                     type="button"
                     onClick={onDecline}
-                    className="press inline-flex min-h-9 items-center justify-center border border-rule px-3 text-[0.8125rem] text-ink-soft hover:border-ink hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-[3px] focus-visible:outline-coral"
+                    className="press inline-flex min-h-9 items-center justify-center border border-rule px-3 text-[0.8125rem] text-ink-soft hover:border-ink hover:text-ink"
                   >
                     Not Now
                   </button>
@@ -152,7 +152,7 @@ export function ConsentBanner({
             aria-expanded={false}
             aria-label={`${chipLabel}. Open details options`}
             onClick={() => setOpen(true)}
-            className="press inline-flex min-h-9 items-center gap-1.5 border border-rule bg-paper-raised px-2.5 py-1.5 text-[0.6875rem] text-ink-soft shadow-sheet hover:border-ink hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-[3px] focus-visible:outline-coral"
+            className="press inline-flex min-h-9 items-center gap-1.5 border border-rule bg-paper-raised px-2.5 py-1.5 text-[0.6875rem] text-ink-soft shadow-sheet hover:border-ink hover:text-ink"
           >
             {storageBlocked ? (
               <CloseIcon className="h-3.5 w-3.5 text-coral-ink" />

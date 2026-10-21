@@ -72,7 +72,7 @@ export function CoursePicker({
             id="picker-title"
             ref={headingRef}
             tabIndex={-1}
-            className="mt-1.5 text-title font-medium tracking-[-0.015em] focus:outline-none"
+            className="mt-1.5 text-title font-medium tracking-[-0.015em]"
           >
             Select courses
           </h2>
