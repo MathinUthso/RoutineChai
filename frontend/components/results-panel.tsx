@@ -1,15 +1,16 @@
 "use client";
 
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { buildRoutineCalendar, calendarFilename } from "@/lib/calendar";
 import { durations, panelVariants } from "@/lib/motion";
-import { formatGap, formatMeeting } from "@/lib/schedule";
+import { formatGap, formatMeeting, formatTimeRange } from "@/lib/schedule";
 import type {
   Diagnostics,
   GenerateResult,
   Routine,
   ScoreBreakdown,
 } from "@/lib/types";
-import { ArrowLeftIcon, ArrowRightIcon } from "./icons";
+import { ArrowLeftIcon, ArrowRightIcon, CalendarIcon } from "./icons";
 import { WeeklyCalendar } from "./weekly-calendar";
 
 type ResultStatus = "idle" | "loading" | "error" | "ready";
@@ -19,10 +20,14 @@ type ResultsPanelProps = {
   result?: GenerateResult;
   error?: string;
   selectedId: string | null;
+  page: number;
+  pageLoading: boolean;
+  pageError: { page: number; message: string } | null;
   headingRef?: React.RefObject<HTMLHeadingElement | null>;
   onSelect: (id: string) => void;
   onBack: () => void;
   onRetry: () => void;
+  onPageChange: (page: number) => void;
 };
 
 const BREAKDOWN_LABELS: { key: keyof ScoreBreakdown; label: string }[] = [
@@ -37,6 +42,25 @@ function scoreTone(score: number) {
   if (score >= 80) return "text-green";
   if (score >= 55) return "text-ink";
   return "text-coral-ink";
+}
+
+function pageItems(page: number, pageCount: number): (number | string)[] {
+  if (pageCount <= 7) {
+    return Array.from({ length: pageCount }, (_, index) => index);
+  }
+
+  const visible = new Set([0, pageCount - 1, page - 1, page, page + 1]);
+  const pages = [...visible].filter((value) => value >= 0 && value < pageCount).sort((a, b) => a - b);
+  const items: (number | string)[] = [];
+
+  pages.forEach((value, index) => {
+    if (index > 0 && value - pages[index - 1] > 1) {
+      items.push(`gap-${pages[index - 1]}`);
+    }
+    items.push(value);
+  });
+
+  return items;
 }
 
 function DiagnosticsBlock({ diagnostics }: { diagnostics: Diagnostics[] }) {
@@ -69,7 +93,7 @@ function EmptyResult({
   return (
     <div className="mt-6 border border-rule bg-paper-raised shadow-sheet">
       <div className="border-b border-rule px-5 py-4">
-        <p className="mono-label text-coral-ink">No sheet could be issued</p>
+        <p className="mono-label text-coral-ink">No routines found</p>
         <h3 className="mt-1 text-[1.35rem] font-medium tracking-[-0.01em] text-ink">
           The constraints leave no valid timetable.
         </h3>
@@ -147,27 +171,57 @@ function Breakdown({ routine }: { routine: Routine }) {
   );
 }
 
+function downloadCalendar(routine: Routine) {
+  const blob = new Blob([buildRoutineCalendar(routine)], {
+    type: "text/calendar;charset=utf-8",
+  });
+  const href = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = href;
+  anchor.download = calendarFilename(routine);
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  window.setTimeout(() => URL.revokeObjectURL(href), 1000);
+}
+
 function RoutineDetail({ routine }: { routine: Routine }) {
   return (
     <div className="border border-rule bg-paper-raised shadow-sheet">
       <div className="flex flex-wrap items-start justify-between gap-4 border-b border-rule px-5 py-4">
         <div>
-          <p className="mono-label text-ink-faint">Selected sheet</p>
+          <p className="mono-label text-ink-faint">Selected routine</p>
           <h3 className="mt-1 text-[1.2rem] font-medium tracking-[-0.01em] text-ink">
-            Issued routine
+            Your timetable
           </h3>
           <p className="mono-label mt-1 text-ink-faint">
             {routine.courses.length} courses · {routine.stats.campus_days} campus{" "}
             {routine.stats.campus_days === 1 ? "day" : "days"}
           </p>
         </div>
-        <div className="text-right">
-          <p className="mono-label text-ink-faint">Score</p>
-          <p className={`font-mono text-[2rem] leading-none tabular ${scoreTone(routine.score)}`}>
-            {routine.score.toFixed(1)}
-          </p>
+        <div className="flex flex-col items-end gap-2 text-right">
+          <div>
+            <p className="mono-label text-ink-faint">Score</p>
+            <p className={`font-mono text-[2rem] leading-none tabular ${scoreTone(routine.score)}`}>
+              {routine.score.toFixed(1)}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => downloadCalendar(routine)}
+            title="Download every class as a weekly .ics from the next occurrence. Verify dates before relying on it."
+            className="inline-flex min-h-9 items-center gap-1.5 border border-rule-strong px-2.5 font-mono text-[0.625rem] uppercase tracking-[0.12em] text-ink transition-colors hover:border-ink hover:bg-paper focus-visible:border-ink"
+          >
+            <CalendarIcon className="h-3.5 w-3.5" />
+            Google Calendar
+          </button>
         </div>
       </div>
+
+      <p className="mono-label border-b border-rule px-5 py-2 leading-relaxed text-ink-faint">
+        Calendar export repeats weekly for 16 classes from the next occurrence. Verify term dates
+        and holidays before relying on it.
+      </p>
 
       <div className="grid grid-cols-3 divide-x divide-rule border-b border-rule">
         {[
@@ -176,7 +230,7 @@ function RoutineDetail({ routine }: { routine: Routine }) {
           [
             "Span",
             routine.stats.earliest && routine.stats.latest
-              ? `${routine.stats.earliest}–${routine.stats.latest}`
+              ? formatTimeRange(routine.stats.earliest, routine.stats.latest)
               : "—",
           ],
         ].map(([label, value]) => (
@@ -196,7 +250,7 @@ function RoutineDetail({ routine }: { routine: Routine }) {
 
       <div className="border-t border-rule">
         <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 px-5 pt-4 pb-3">
-          <h4 className="mono-label text-ink">Course ledger</h4>
+          <h4 className="mono-label text-ink">Courses</h4>
           <p className="mono-label tabular text-ink-faint">
             {routine.courses.length} courses · {routine.stats.total_credits.toFixed(1)} credits
           </p>
@@ -225,8 +279,15 @@ function RoutineDetail({ routine }: { routine: Routine }) {
                   <p className="mt-0.5 max-w-[18rem] text-[0.8125rem] leading-snug text-ink-soft">
                     {course.title}
                   </p>
-                  <p className="mono-label mt-1 text-ink-faint">
-                    {course.kind === "lab" ? "Lab" : "Theory"} · {course.faculty}
+                  <p className="mono-label mt-1 flex flex-wrap items-center gap-1.5 text-ink-faint">
+                    <span>
+                      {course.kind === "lab" ? "Lab" : "Theory"} · {course.faculty}
+                    </span>
+                    {course.manual && (
+                      <span className="border border-coral/45 px-1 py-0.5 text-[0.5625rem] tracking-[0.1em] text-coral-ink">
+                        Manual
+                      </span>
+                    )}
                   </p>
                 </td>
                 <td className="hidden px-4 py-3 align-top sm:table-cell">
@@ -261,14 +322,24 @@ export function ResultsPanel({
   result,
   error,
   selectedId,
+  page,
+  pageLoading,
+  pageError,
   headingRef,
   onSelect,
   onBack,
   onRetry,
+  onPageChange,
 }: ResultsPanelProps) {
   const reduceMotion = useReducedMotion();
   const routines = result?.routines ?? [];
   const selected = routines.find((routine) => routine.id === selectedId) ?? routines[0];
+  const pageCount = result ? Math.max(1, Math.ceil(result.total / result.limit)) : 1;
+  const totalLabel = result ? `${result.total}${result.total_is_partial ? "+" : ""}` : "0";
+  const rangeLabel =
+    result && routines.length > 0
+      ? `${result.offset + 1}–${result.offset + routines.length} of ${totalLabel}`
+      : `0 of ${totalLabel}`;
 
   return (
     <section aria-labelledby="results-title" className="min-w-0">
@@ -281,14 +352,14 @@ export function ResultsPanel({
             tabIndex={-1}
             className="mt-1.5 text-title font-medium tracking-[-0.015em] focus:outline-none"
           >
-            The issued sheet
+            Ranked routines
           </h2>
         </div>
         <p className="mono-label tabular text-ink-faint" aria-live="polite">
           {status === "loading"
             ? "Consulting the solver"
             : status === "ready"
-              ? `${routines.length} ${routines.length === 1 ? "option" : "options"}`
+              ? rangeLabel
               : "Awaiting a request"}
         </p>
       </div>
@@ -350,12 +421,17 @@ export function ResultsPanel({
             <div>
               <div className="flex items-baseline justify-between gap-3 border-y border-rule py-2">
                 <h3 className="mono-label text-ink">Ranked options</h3>
-                <span className="mono-label tabular text-ink-faint">
-                  {result.truncated ? "top 10" : `${routines.length} total`}
+                <span className="mono-label tabular text-ink-faint" aria-live="polite">
+                  {pageLoading ? "Loading page…" : rangeLabel}
                 </span>
               </div>
 
-              <ol className="mt-2 space-y-2">
+              <ol
+                className={`mt-2 space-y-2 transition-opacity duration-[var(--duration-quick)] ${
+                  pageLoading ? "pointer-events-none opacity-55" : ""
+                }`}
+                aria-busy={pageLoading}
+              >
                 {routines.map((routine, index) => {
                   const active = routine.id === selected?.id;
                   return (
@@ -379,7 +455,7 @@ export function ResultsPanel({
                       >
                         <span className="flex items-baseline justify-between gap-3">
                           <span className="mono-label text-ink-faint">
-                            Rank {String(index + 1).padStart(2, "0")}
+                            Rank {String(result.offset + index + 1).padStart(2, "0")}
                           </span>
                           <span className={`font-mono text-[1.15rem] leading-none tabular ${scoreTone(routine.score)}`}>
                             {routine.score.toFixed(1)}
@@ -403,9 +479,82 @@ export function ResultsPanel({
                 })}
               </ol>
 
-              {result.truncated && (
-                <p className="mono-label mt-3 leading-relaxed text-ink-faint">
-                  More valid sheets exist; the top 10 are shown.
+              {pageError && (
+                <div role="alert" className="mt-3 border border-coral/60 bg-coral-tint/25 px-3 py-2.5">
+                  <p className="text-[0.8125rem] leading-relaxed text-ink-soft">
+                    {pageError.message}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => onPageChange(pageError.page)}
+                    className="mono-label mt-1.5 text-coral-ink underline decoration-coral/40 underline-offset-4 hover:decoration-coral"
+                  >
+                    Retry this page
+                  </button>
+                </div>
+              )}
+
+              <nav aria-label="Routine pages" className="mt-3 flex flex-wrap items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => onPageChange(page - 1)}
+                  disabled={pageLoading || page === 0}
+                  aria-label="Previous page"
+                  className="inline-flex h-9 items-center gap-1 border border-rule px-2 font-mono text-[0.6875rem] text-ink transition-colors hover:border-ink disabled:cursor-not-allowed disabled:border-rule/60 disabled:text-ink-faint"
+                >
+                  <ArrowLeftIcon className="h-3.5 w-3.5" />
+                  Prev
+                </button>
+
+                {pageItems(page, pageCount).map((item) =>
+                  typeof item === "string" ? (
+                    <span key={item} aria-hidden className="px-0.5 text-ink-faint">
+                      …
+                    </span>
+                  ) : (
+                    <button
+                      key={item}
+                      type="button"
+                      onClick={() => onPageChange(item)}
+                      disabled={pageLoading}
+                      aria-label={`Page ${item + 1}`}
+                      aria-current={item === page ? "page" : undefined}
+                      className={`inline-flex h-9 min-w-9 items-center justify-center border px-2 font-mono text-[0.6875rem] tabular transition-colors ${
+                        item === page
+                          ? "border-green bg-green text-paper"
+                          : "border-rule text-ink hover:border-ink hover:bg-paper"
+                      } disabled:cursor-not-allowed disabled:opacity-60`}
+                    >
+                      {item + 1}
+                    </button>
+                  ),
+                )}
+
+                {result.total_is_partial && page + 1 >= pageCount && result.truncated && (
+                  <span aria-hidden className="px-0.5 text-ink-faint">
+                    …
+                  </span>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => onPageChange(page + 1)}
+                  disabled={
+                    pageLoading ||
+                    (!result.total_is_partial && page + 1 >= pageCount) ||
+                    (result.total_is_partial && !result.truncated)
+                  }
+                  aria-label="Next page"
+                  className="inline-flex h-9 items-center gap-1 border border-rule px-2 font-mono text-[0.6875rem] text-ink transition-colors hover:border-ink disabled:cursor-not-allowed disabled:border-rule/60 disabled:text-ink-faint"
+                >
+                  Next
+                  <ArrowRightIcon className="h-3.5 w-3.5" />
+                </button>
+              </nav>
+
+              {result.total_is_partial && (
+                <p className="mono-label mt-2 leading-relaxed text-ink-faint">
+                  The solver stopped at its search cap; the total is a lower bound.
                 </p>
               )}
 

@@ -3,7 +3,13 @@
 import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { motion, useReducedMotion } from "framer-motion";
-import { DAYS, DAY_NAMES, minutesOfDay } from "@/lib/schedule";
+import {
+  DAYS,
+  DAY_NAMES,
+  formatClockLabel,
+  formatTimeRange,
+  minutesOfDay,
+} from "@/lib/schedule";
 import type { Day, Meeting, Routine, RoutineCourse } from "@/lib/types";
 
 /** Teaching day window: first bell 08:30, last dismissal 16:30. */
@@ -46,12 +52,6 @@ function percentOf(minutes: number) {
   return ((minutes - RANGE_START) / SPAN) * 100;
 }
 
-function formatClock(minutes: number) {
-  const hours = Math.floor(minutes / 60);
-  const rest = minutes % 60;
-  return `${String(hours).padStart(2, "0")}:${String(rest).padStart(2, "0")}`;
-}
-
 /** Clock-aligned rules: every 30 minutes from 09:00 to 16:00. */
 const RULES = Array.from({ length: (RANGE_END - RANGE_START - 30) / 30 }, (_, index) => {
   const minutes = RANGE_START + 30 + index * 30;
@@ -91,7 +91,7 @@ function roomOf(meeting: Meeting) {
 
 function meetingSentence(course: RoutineCourse, meeting: Meeting) {
   return [
-    `${DAY_NAMES[meeting.day]} ${meeting.start} to ${meeting.end}`,
+    `${DAY_NAMES[meeting.day]} ${formatTimeRange(meeting.start, meeting.end)}`,
     `${course.code} ${course.title}`,
     `section ${course.section}`,
     course.kind === "lab" ? "lab session" : "theory class",
@@ -103,7 +103,7 @@ function meetingSentence(course: RoutineCourse, meeting: Meeting) {
 function meetingTitle(course: RoutineCourse, meeting: Meeting) {
   return [
     `${course.code} · ${course.title}`,
-    `${DAY_NAMES[meeting.day]} ${meeting.start}–${meeting.end} · ${roomOf(meeting)}`,
+    `${DAY_NAMES[meeting.day]} ${formatTimeRange(meeting.start, meeting.end)} · ${roomOf(meeting)}`,
     `${course.faculty} · Section ${course.section} · ${course.kind === "lab" ? "Lab" : "Theory"}`,
   ].join("\n");
 }
@@ -165,7 +165,7 @@ export function WeeklyCalendar({ routine }: { routine: Routine }) {
           day,
           count: items.length,
           span: items.length
-            ? `${formatClock(Math.min(...starts))}–${formatClock(Math.max(...ends))}`
+            ? `${formatClockLabel(Math.min(...starts))}–${formatClockLabel(Math.max(...ends))}`
             : "—",
         };
       }),
@@ -217,14 +217,14 @@ export function WeeklyCalendar({ routine }: { routine: Routine }) {
         <h4 id={headingId} className="mono-label text-ink">
           Weekly grid
         </h4>
-        <p className="mono-label tabular text-ink-faint">Sat–Wed · 08:30–16:30</p>
+        <p className="mono-label tabular text-ink-faint">Sat–Wed · 8:30 AM–4:30 PM</p>
       </div>
 
       {placed.length === 0 ? (
         <div className="mx-5 mt-1 mb-5 border border-dashed border-rule-strong/70 px-4 py-5">
-          <p className="text-[0.9375rem] text-ink">No classes on this sheet.</p>
+          <p className="text-[0.9375rem] text-ink">No classes in this routine.</p>
           <p className="mt-1 max-w-[52ch] text-[0.8125rem] leading-relaxed text-ink-faint">
-            The solver returned a routine without scheduled sessions. Check the course ledger or
+            The solver returned a routine without scheduled sessions. Check the course list or
             re-run the solver with a different constraint set.
           </p>
         </div>
@@ -232,7 +232,7 @@ export function WeeklyCalendar({ routine }: { routine: Routine }) {
         <>
           <div
             role="group"
-            aria-label="Weekly timetable, Saturday to Wednesday, 08:30 to 16:30. Scroll sideways for later days."
+            aria-label="Weekly timetable, Saturday to Wednesday, 8:30 AM to 4:30 PM. Scroll sideways for later days."
             tabIndex={0}
             onScroll={hideTip}
             className="overflow-x-auto overscroll-x-contain bg-paper/45 outline-offset-0"
@@ -270,7 +270,7 @@ export function WeeklyCalendar({ routine }: { routine: Routine }) {
                             : "-translate-y-1/2"
                       }`}
                     >
-                      {formatClock(minutes)}
+                      {formatClockLabel(minutes, false)}
                     </span>
                   ))}
                 </div>
@@ -331,13 +331,14 @@ export function WeeklyCalendar({ routine }: { routine: Routine }) {
                             </span>
                           </span>
                           <span className="mt-0.5 truncate font-mono text-[0.625rem] leading-tight text-ink-soft">
+                            {formatTimeRange(item.meeting.start, item.meeting.end)} ·{" "}
                             {roomOf(item.meeting)}
                           </span>
                           {item.course.kind === "lab" && (
                             <span className="mono-label mt-auto text-[0.5rem] text-ink-faint">Lab</span>
                           )}
                           {item.clamped && (
-                            <span className="sr-only">Partially outside the 08:30–16:30 window.</span>
+                            <span className="sr-only">Partially outside the 8:30 AM–4:30 PM window.</span>
                           )}
                         </motion.button>
                       );
@@ -367,7 +368,7 @@ export function WeeklyCalendar({ routine }: { routine: Routine }) {
           </div>
 
           <div className="sr-only">
-            <h5>Meetings on this sheet</h5>
+            <h5>Meetings in this routine</h5>
             <ul>
               {placed.map((item) => (
                 <li key={`sr-${item.key}`}>{meetingSentence(item.course, item.meeting)}.</li>
@@ -398,7 +399,7 @@ export function WeeklyCalendar({ routine }: { routine: Routine }) {
             <dl className="mt-2 grid grid-cols-[auto_minmax(0,1fr)] gap-x-2.5 gap-y-0.5 font-mono text-[0.6875rem] leading-relaxed">
               <dt className="text-ink-faint">When</dt>
               <dd className="tabular text-ink">
-                {active.meeting.day} {active.meeting.start}–{active.meeting.end}
+                {active.meeting.day} {formatTimeRange(active.meeting.start, active.meeting.end)}
               </dd>
               <dt className="text-ink-faint">Room</dt>
               <dd className="text-ink">{roomOf(active.meeting)}</dd>
