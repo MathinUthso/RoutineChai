@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { TONE_CLASS, toneFor } from "@/lib/course-tone";
 import { formatMeeting } from "@/lib/schedule";
 import { catalogSlotMinutes, sectionOptions, sectionSummary } from "@/lib/section-plan";
 import type {
@@ -65,9 +66,7 @@ function optionLabel(
   if (marking) {
     return `Mark ${routineCourse.code} section ${sectionName} full and re-rank`;
   }
-  return `Swap ${routineCourse.code} to section ${sectionName}${
-    reason ? `. ${reason}` : ""
-  }`;
+  return `Swap ${routineCourse.code} to section ${sectionName}${reason ? `. ${reason}` : ""}`;
 }
 
 export function SectionBoard({
@@ -83,27 +82,29 @@ export function SectionBoard({
 }: SectionBoardProps) {
   const [marking, setMarking] = useState(false);
   const [onlyReady, setOnlyReady] = useState(false);
+  const [showLegend, setShowLegend] = useState(false);
   const slotMinutes = catalogSlotMinutes(catalog);
   const busy = pending !== null;
 
   return (
-    <section aria-labelledby="section-board-title" className="border-t border-rule">
-      <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2 px-5 pt-4 pb-3">
-        <div>
-          <h4 id="section-board-title" className="mono-label text-ink">
-            Section board
-          </h4>
-          <p className="mt-1 max-w-[66ch] text-[0.8125rem] leading-relaxed text-ink-faint">
-            Swap one section without losing the rest of the plan. If the registrar fills a
-            section, mark it full and the solver re-ranks every remaining combination.
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
+    <section
+      aria-labelledby="section-board-title"
+      className="border border-rule bg-paper-raised shadow-sheet"
+    >
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-rule px-4 py-2.5">
+        <h3
+          id="section-board-title"
+          className="mono-label text-ink"
+          title="Swap one section without losing the rest of the plan. Mark a section full and the solver re-ranks the remaining combinations."
+        >
+          Section board
+        </h3>
+        <div className="flex items-center gap-1.5">
           <button
             type="button"
             aria-pressed={onlyReady}
             onClick={() => setOnlyReady((value) => !value)}
-            className={`press mono-label inline-flex min-h-9 items-center border px-2.5 ${
+            className={`press mono-label inline-flex min-h-9 items-center border px-2 ${
               onlyReady
                 ? "border-green bg-green-tint/60 text-green-deep"
                 : "border-rule-strong text-ink hover:border-ink hover:bg-paper"
@@ -115,7 +116,7 @@ export function SectionBoard({
             type="button"
             aria-pressed={marking}
             onClick={() => setMarking((value) => !value)}
-            className={`press mono-label inline-flex min-h-9 items-center border px-2.5 ${
+            className={`press mono-label inline-flex min-h-9 items-center border px-2 ${
               marking
                 ? "border-coral bg-coral text-paper hover:bg-coral-ink"
                 : "border-rule-strong text-ink hover:border-coral hover:text-coral-ink"
@@ -126,20 +127,37 @@ export function SectionBoard({
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 border-y border-rule/70 bg-paper/40 px-5 py-2">
-        {LEGEND.map(([label, swatch]) => (
-          <span key={label} className="mono-label flex items-center gap-1.5 text-ink-faint">
-            <span aria-hidden className={`h-2.5 w-2.5 border ${swatch}`} />
-            {label}
-          </span>
-        ))}
-        <span className="mono-label ml-auto text-ink-faint" aria-live="polite">
-          {pending ? `Checking ${pending.code} ${pending.section}…` : marking ? "Pick any section to mark it full" : "Pick a ready section to swap"}
-        </span>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-rule/70 bg-paper/40 px-4 py-2">
+        {showLegend ? (
+          LEGEND.map(([label, swatch]) => (
+            <span key={label} className="mono-label flex items-center gap-1.5 text-ink-faint">
+              <span aria-hidden className={`h-2.5 w-2.5 border ${swatch}`} />
+              {label}
+            </span>
+          ))
+        ) : (
+          <span className="mono-label text-ink-faint">Section status</span>
+        )}
+        <button
+          type="button"
+          aria-expanded={showLegend}
+          onClick={() => setShowLegend((value) => !value)}
+          className="cue-underline mono-label ml-auto text-ink-faint hover:text-ink"
+        >
+          {showLegend ? "Hide key" : "Show key"}
+        </button>
       </div>
 
+      <p className="mono-label border-b border-rule/70 px-4 py-2 text-ink-faint" aria-live="polite">
+        {pending
+          ? `Checking ${pending.code} ${pending.section}…`
+          : marking
+            ? "Pick any section to mark it full"
+            : "Pick a ready section to swap"}
+      </p>
+
       {error && (
-        <p role="alert" className="border-b border-coral/50 px-5 py-2 text-[0.8125rem] text-coral-ink">
+        <p role="alert" className="border-b border-coral/50 px-4 py-2 text-[0.8125rem] text-coral-ink">
           {error}
         </p>
       )}
@@ -167,30 +185,25 @@ export function SectionBoard({
           ).length;
 
           return (
-            <div key={routineCourse.code} className="px-5 py-3.5">
+            <div key={routineCourse.code} className="ledger-auto px-4 py-3">
               <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-                <div className="min-w-0">
-                  <p className="flex flex-wrap items-baseline gap-x-2">
-                    <span className="font-mono text-[0.75rem] font-medium text-ink">
-                      {routineCourse.code}
-                    </span>
-                    <span className="inline-flex border border-green/45 bg-green-tint/45 px-1.5 py-0.5 font-mono text-[0.65rem] text-green-deep">
-                      {routineCourse.section}
-                    </span>
-                    <span className="truncate text-[0.8125rem] text-ink-soft">
-                      {routineCourse.title}
-                    </span>
-                  </p>
-                  <p className="mono-label mt-1 text-ink-faint">
-                    {routineCourse.faculty} ·{" "}
-                    {routineCourse.meetings.map(formatMeeting).join(" · ")}
-                  </p>
-                </div>
+                <p className="flex min-w-0 items-baseline gap-1.5">
+                  <span
+                    aria-hidden
+                    className={`h-2 w-2 shrink-0 rounded-full ${TONE_CLASS[toneFor(routineCourse.code)].dot}`}
+                  />
+                  <span className="font-mono text-[0.75rem] font-medium text-ink">
+                    {routineCourse.code}
+                  </span>
+                  <span className="inline-flex border border-green/45 bg-green-tint/45 px-1.5 py-0.5 font-mono text-[0.65rem] text-green-deep">
+                    {routineCourse.section}
+                  </span>
+                </p>
                 <div className="flex items-center gap-2">
                   <span className="mono-label tabular text-ink-faint">
                     {routineCourse.manual
                       ? "Manual slot"
-                      : `${readyCount} ${readyCount === 1 ? "swap" : "swaps"} ready`}
+                      : `${readyCount} ${readyCount === 1 ? "swap" : "swaps"}`}
                   </span>
                   {!routineCourse.manual && (
                     <>
@@ -200,24 +213,33 @@ export function SectionBoard({
                       <button
                         type="button"
                         disabled={busy}
+                        title="Remove this section from the solver and re-rank the remaining plans."
                         onClick={() => onMarkFull(routineCourse.code, routineCourse.section)}
                         className="cue-underline mono-label text-coral-ink disabled:opacity-50"
                       >
-                        Mark current full
+                        Mark full
                       </button>
                     </>
                   )}
                 </div>
               </div>
 
+              <p
+                className="mono-label mt-1 truncate text-ink-faint"
+                title={`${routineCourse.title} · ${routineCourse.faculty} · ${routineCourse.meetings
+                  .map(formatMeeting)
+                  .join(" · ")}`}
+              >
+                {routineCourse.faculty} · {routineCourse.meetings.map(formatMeeting).join(" · ")}
+              </p>
+
               {routineCourse.manual ? (
                 <p className="mt-2 border border-dashed border-rule px-2.5 py-2 text-[0.8125rem] text-ink-soft">
-                  This project slot was entered manually. Change it in Step 02 if the supervisor
-                  moves the meeting.
+                  Manual project slot. Change it in Step 02.
                 </p>
               ) : options.length === 0 ? (
                 <p className="mt-2 text-[0.8125rem] text-ink-faint">
-                  No catalog sections are available for this course.
+                  No catalog sections for this course.
                 </p>
               ) : (
                 <div className="mt-2.5 flex flex-wrap gap-1.5">
@@ -246,9 +268,7 @@ export function SectionBoard({
                           disabled={!interactive || busy}
                           aria-label={optionLabel(routineCourse, section.name, status, marking, reason)}
                           title={
-                            reason ??
-                            section.meetings.map(formatMeeting).join(" · ") ??
-                            "No meeting time listed"
+                            reason ?? section.meetings.map(formatMeeting).join(" · ")
                           }
                           onClick={() => {
                             if (status === "excluded") {
@@ -259,7 +279,7 @@ export function SectionBoard({
                               onSwap(routineCourse.code, section.name);
                             }
                           }}
-                          className={`press relative flex min-h-10 min-w-[3.4rem] flex-col items-start justify-center border px-2 py-1 text-left transition-colors ${statusClass(
+                          className={`press relative flex min-h-9 min-w-[3.2rem] flex-col items-start justify-center border px-1.5 py-1 text-left transition-colors ${statusClass(
                             status,
                             marking,
                           )} ${isPending ? "animate-pulse" : ""}`}
@@ -269,13 +289,18 @@ export function SectionBoard({
                               <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-green" />
                             )}
                             {(status === "clash" || status === "filtered") && (
-                              <span aria-hidden className="text-[0.6rem] leading-none text-coral-ink/60">
+                              <span
+                                aria-hidden
+                                className="text-[0.6rem] leading-none text-coral-ink/60"
+                              >
                                 ×
                               </span>
                             )}
                             {section.name}
                             {section.if_required && (
-                              <span className="text-[0.5rem] tracking-[0.08em] opacity-75">cond.</span>
+                              <span className="text-[0.5rem] tracking-[0.08em] opacity-75">
+                                cond.
+                              </span>
                             )}
                           </span>
                           <span className="font-mono text-[0.56rem] tabular opacity-75">

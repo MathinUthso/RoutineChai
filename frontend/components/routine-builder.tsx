@@ -521,7 +521,10 @@ export function RoutineBuilder() {
         onSelect={setStep}
       />
 
-      <main className="mx-auto w-full max-w-[1180px] px-[var(--space-gutter)] pb-16 sm:pb-20">
+      <main
+        id="main"
+        className="mx-auto w-full max-w-[1480px] px-[var(--space-gutter)] pb-16 sm:pb-20"
+      >
         <div ref={panelRef} className="scroll-mt-2 pt-8 lg:pt-10">
           <AnimatePresence mode="wait" initial={false}>
             {step === 1 && (
@@ -532,7 +535,7 @@ export function RoutineBuilder() {
                 animate="center"
                 exit="exit"
                 transition={{ duration: reduceMotion ? 0 : durations.panel, ease: "easeOut" }}
-                className="grid gap-9 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start lg:gap-10 xl:grid-cols-[minmax(0,1fr)_21.5rem] xl:gap-14"
+                className="mx-auto grid w-full max-w-[1180px] gap-9 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start lg:gap-10 xl:grid-cols-[minmax(0,1fr)_21.5rem] xl:gap-14"
               >
                 <CoursePicker
                   status={catalogState.status}
@@ -576,7 +579,7 @@ export function RoutineBuilder() {
                 animate="center"
                 exit="exit"
                 transition={{ duration: reduceMotion ? 0 : durations.panel, ease: "easeOut" }}
-                className="min-w-0"
+                className="mx-auto w-full max-w-[1180px] min-w-0"
               >
                 <ConstraintsPanel
                   selected={selected}

@@ -2,6 +2,7 @@
 
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { buildRoutineCalendar, calendarFilename } from "@/lib/calendar";
+import { TONE_CLASS, toneFor } from "@/lib/course-tone";
 import { durations, panelVariants } from "@/lib/motion";
 import { formatGap, formatMeeting, formatTimeRange } from "@/lib/schedule";
 import { catalogSlotMinutes, longestGapMinutes, planLabel } from "@/lib/section-plan";
@@ -220,24 +221,10 @@ function RoutineDetail({
   routine,
   planName,
   catalog,
-  constraints,
-  preferences,
-  pendingSwap,
-  swapError,
-  onSwap,
-  onMarkFull,
-  onRestoreSection,
 }: {
   routine: Routine;
   planName: string;
   catalog: CatalogResponse | null;
-  constraints: Constraints;
-  preferences: Record<string, CoursePreference>;
-  pendingSwap: { code: string; section: string } | null;
-  swapError: string | null;
-  onSwap: (code: string, section: string) => void;
-  onMarkFull: (code: string, section: string) => void;
-  onRestoreSection: (code: string, section: string) => void;
 }) {
   const longestGap = longestGapMinutes(
     routine.courses.flatMap((course) => course.meetings),
@@ -276,10 +263,12 @@ function RoutineDetail({
         </div>
       </div>
 
-      <p className="mono-label border-b border-rule px-5 py-2 leading-relaxed text-ink-faint">
-        Calendar export repeats weekly for 16 classes from the next occurrence. Verify term dates
-        and holidays before relying on it.
-      </p>
+      <div className="mono-label flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-rule px-5 py-2 text-ink-faint">
+        <span title="Export repeats weekly for 16 classes from the next occurrence. Verify term dates and holidays before relying on it.">
+          ICS · 16 weekly classes
+        </span>
+        <span>Verify against the registrar notice</span>
+      </div>
 
       <div className="grid grid-cols-2 divide-x divide-y divide-rule border-b border-rule sm:grid-cols-4 sm:divide-y-0">
         {[
@@ -381,18 +370,6 @@ function RoutineDetail({
           </table>
         </div>
       </div>
-
-      <SectionBoard
-        routine={routine}
-        catalog={catalog}
-        constraints={constraints}
-        preferences={preferences}
-        pending={pendingSwap}
-        error={swapError}
-        onSwap={onSwap}
-        onMarkFull={onMarkFull}
-        onRestore={onRestoreSection}
-      />
     </div>
   );
 }
@@ -450,41 +427,46 @@ export function ResultsPanel({
             id="results-title"
             ref={headingRef}
             tabIndex={-1}
+            title="Every plan is one complete section combination. Plan A scores highest; the rest are backups."
             className="mt-1.5 text-title font-medium tracking-[-0.015em] focus:outline-none"
           >
             Plans &amp; backups
           </h2>
-          <p className="mt-2 max-w-[62ch] text-[0.875rem] leading-relaxed text-ink-soft">
-            Every plan is one complete section combination. Plan A is the strongest; the rest are
-            your backups, ready when a section fills up.
-          </p>
         </div>
-        <p className="mono-label tabular text-ink-faint" aria-live="polite">
-          {status === "loading"
-            ? "Consulting the solver"
-            : status === "ready"
-              ? rangeLabel
-              : "Awaiting a request"}
-        </p>
+        <dl
+          className="flex flex-wrap items-center gap-x-5 gap-y-1"
+          aria-live="polite"
+          aria-label="Result summary"
+        >
+          <div className="flex items-baseline gap-1.5">
+            <dt className="mono-label text-ink-faint">Combinations</dt>
+            <dd className="font-mono text-[0.75rem] tabular text-ink">{totalLabel}</dd>
+          </div>
+          <div className="flex items-baseline gap-1.5">
+            <dt className="mono-label text-ink-faint">Page</dt>
+            <dd className="font-mono text-[0.75rem] tabular text-ink">
+              {page + 1}/{pageCount}
+            </dd>
+          </div>
+          <div className="flex items-baseline gap-1.5">
+            <dt className="mono-label text-ink-faint">Open</dt>
+            <dd className="font-mono text-[0.75rem] tabular text-ink">{planName}</dd>
+          </div>
+        </dl>
       </div>
 
-      {status === "ready" && (
-        <LiveRefine
-          constraints={constraints}
-          busy={liveBusy || pageLoading}
-          error={liveError}
-          onChange={onConstraintsChange}
-        />
-      )}
-
       {status === "loading" && (
-        <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,21rem)_minmax(0,1fr)]" aria-busy>
+        <div
+          className="mt-6 grid gap-6 lg:grid-cols-[17rem_minmax(0,1fr)] xl:grid-cols-[17rem_minmax(0,1fr)_19rem]"
+          aria-busy
+        >
           <div className="space-y-2">
             {[0, 1, 2].map((index) => (
               <div key={index} className="h-24 animate-pulse border border-rule bg-paper-raised" />
             ))}
           </div>
           <div className="h-[26rem] animate-pulse border border-rule bg-paper-raised" />
+          <div className="hidden h-[26rem] animate-pulse border border-rule bg-paper-raised xl:block" />
           <p className="sr-only">Generating ranked timetables.</p>
         </div>
       )}
@@ -530,113 +512,156 @@ export function ResultsPanel({
               : ""}
           </p>
 
-          <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,21rem)_minmax(0,1fr)] lg:items-start">
-            <div>
-              <div className="flex items-baseline justify-between gap-3 border-y border-rule py-2">
-                <h3 className="mono-label text-ink">Plans, best first</h3>
-                <span className="mono-label tabular text-ink-faint" aria-live="polite">
-                  {pageLoading ? "Loading page…" : rangeLabel}
-                </span>
-              </div>
+          <div className="mt-6 grid gap-6 lg:grid-cols-[17rem_minmax(0,1fr)] lg:items-start xl:grid-cols-[17rem_minmax(0,1fr)_19rem]">
+            <aside
+              aria-label="Live filters and plan list"
+              className="order-2 min-w-0 space-y-4 lg:col-start-1 lg:row-start-1 xl:sticky xl:top-4 xl:max-h-[calc(100vh-2rem)] xl:overflow-y-auto xl:pr-1"
+            >
+              <LiveRefine
+                constraints={constraints}
+                busy={liveBusy || pageLoading}
+                error={liveError}
+                onChange={onConstraintsChange}
+              />
 
-              {customRoutine && (
-                <div className="mt-2 border border-green bg-green-tint/45 px-4 py-3">
-                  <div className="flex items-baseline justify-between gap-3">
-                    <span className="mono-label text-green-deep">Working plan</span>
-                    <span
-                      className={`font-mono text-[1.15rem] leading-none tabular ${scoreTone(
-                        customRoutine.score,
-                      )}`}
-                    >
-                      {customRoutine.score.toFixed(1)}
-                    </span>
-                  </div>
-                  <span className="mt-2 flex flex-wrap gap-x-2 gap-y-0.5">
-                    {customRoutine.courses.map((course) => (
-                      <span key={course.code} className="font-mono text-[0.65rem] text-ink-soft">
-                        {course.code}
-                        <span className="text-green-deep"> · {course.section}</span>
-                      </span>
-                    ))}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={onClearCustom}
-                    className="cue-underline mono-label mt-2 text-ink-soft hover:text-ink"
-                  >
-                    Back to ranked plans
-                  </button>
-                </div>
-              )}
-
-              <ol
-                className={`mt-2 space-y-2 transition-opacity duration-[var(--duration-quick)] ${
-                  pageLoading ? "pointer-events-none opacity-55" : ""
-                }`}
-                aria-busy={pageLoading}
+              <section
+                aria-label="Plans"
+                className="border border-rule bg-paper-raised shadow-sheet"
               >
-                {routines.map((routine, index) => {
-                  const active = !customRoutine && routine.id === rankedSelected?.id;
-                  const label = planLabel(result.offset + index);
-                  return (
-                    <li key={routine.id}>
-                      <motion.button
-                        type="button"
-                        aria-pressed={active}
-                        onClick={() => onSelect(routine.id)}
-                        initial={reduceMotion ? false : { opacity: 0, y: 6 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={
-                          reduceMotion
-                            ? { duration: 0 }
-                            : { delay: Math.min(index * 0.035, 0.2), duration: 0.2 }
-                        }
-                        className={`group relative w-full border px-4 py-3 text-left transition-colors duration-[var(--duration-quick)] ${
-                          active
-                            ? "border-green bg-green-tint/45"
-                            : "border-rule bg-paper-raised hover:border-rule-strong"
-                        }`}
+                <div className="flex items-baseline justify-between gap-3 border-b border-rule px-4 py-2.5">
+                  <h3
+                    className="mono-label text-ink"
+                    title="Ranked best first. Every plan is one complete section combination; lower plans are the backups."
+                  >
+                    Plans
+                  </h3>
+                  <span className="mono-label tabular text-ink-faint" aria-live="polite">
+                    {pageLoading ? "Loading page…" : rangeLabel}
+                  </span>
+                </div>
+
+                {customRoutine && (
+                  <div className="border-b border-rule bg-green-tint/35 px-4 py-3">
+                    <div className="flex items-baseline justify-between gap-3">
+                      <span className="mono-label text-green-deep">Working plan</span>
+                      <span
+                        className={`font-mono text-[1.15rem] leading-none tabular ${scoreTone(
+                          customRoutine.score,
+                        )}`}
                       >
-                        <span
-                          aria-hidden
-                          className={`absolute inset-y-0 left-0 w-[2px] origin-top bg-green transition-transform duration-[var(--duration-base)] ease-[var(--ease-ledger)] ${
-                            active ? "scale-y-100" : "scale-y-0 group-hover:scale-y-100"
+                        {customRoutine.score.toFixed(1)}
+                      </span>
+                    </div>
+                    <span className="mt-2 flex flex-wrap gap-x-2 gap-y-0.5">
+                      {customRoutine.courses.map((course) => (
+                        <span key={course.code} className="font-mono text-[0.65rem] text-ink-soft">
+                          {course.code}
+                          <span className="text-green-deep"> · {course.section}</span>
+                        </span>
+                      ))}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={onClearCustom}
+                      className="cue-underline mono-label mt-2 text-ink-soft hover:text-ink"
+                    >
+                      Back to ranked plans
+                    </button>
+                  </div>
+                )}
+
+                <ol
+                  className={`space-y-2 p-3 transition-opacity duration-[var(--duration-quick)] ${
+                    pageLoading ? "pointer-events-none opacity-55" : ""
+                  }`}
+                  aria-busy={pageLoading}
+                >
+                  {routines.map((routine, index) => {
+                    const active = !customRoutine && routine.id === rankedSelected?.id;
+                    const label = planLabel(result.offset + index);
+                    return (
+                      <li key={routine.id}>
+                        <motion.button
+                          type="button"
+                          aria-pressed={active}
+                          onClick={() => onSelect(routine.id)}
+                          initial={reduceMotion ? false : { opacity: 0, y: 6 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={
+                            reduceMotion
+                              ? { duration: 0 }
+                              : { delay: Math.min(index * 0.035, 0.2), duration: 0.2 }
+                          }
+                          className={`group relative w-full border px-3 py-2.5 text-left transition-colors duration-[var(--duration-quick)] ${
+                            active
+                              ? "border-green bg-green-tint/45"
+                              : "border-rule bg-paper hover:border-rule-strong"
                           }`}
-                        />
-                        <span className="flex items-baseline justify-between gap-3">
-                          <span className="mono-label text-ink-faint">
-                            {label}
-                            {result.offset + index > 0 && (
-                              <span className="ml-2 text-ink-faint/70">backup</span>
-                            )}
-                          </span>
-                          <span className={`font-mono text-[1.15rem] leading-none tabular ${scoreTone(routine.score)}`}>
-                            {routine.score.toFixed(1)}
-                          </span>
-                        </span>
-                        <span className="mono-label mt-2 flex flex-wrap gap-x-3 gap-y-1 text-ink-faint">
-                          <span>{routine.stats.campus_days} days</span>
-                          <span title="Idle time between classes, counted only when it lasts a full class slot or more">
-                            {formatGap(routine.stats.gap_minutes)}
-                          </span>
-                          <span>{routine.stats.total_credits.toFixed(1)} cr</span>
-                        </span>
-                        <span className="mt-1.5 flex flex-wrap gap-x-2 gap-y-0.5">
-                          {routine.courses.map((course) => (
-                            <span key={course.code} className="font-mono text-[0.65rem] text-ink-soft">
-                              {course.code}
-                              <span className="text-green-deep"> · {course.section}</span>
+                        >
+                          <span
+                            aria-hidden
+                            className={`absolute inset-y-0 left-0 w-[2px] origin-top bg-green transition-transform duration-[var(--duration-base)] ease-[var(--ease-ledger)] ${
+                              active ? "scale-y-100" : "scale-y-0 group-hover:scale-y-100"
+                            }`}
+                          />
+                          <span className="flex items-baseline justify-between gap-3">
+                            <span className="mono-label text-ink-faint">
+                              {label}
+                              {result.offset + index > 0 && (
+                                <span className="ml-2 text-ink-faint/70">backup</span>
+                              )}
                             </span>
-                          ))}
-                        </span>
-                      </motion.button>
-                    </li>
-                  );
-                })}
-              </ol>
+                            <span
+                              className={`font-mono text-[1.05rem] leading-none tabular ${scoreTone(routine.score)}`}
+                            >
+                              {routine.score.toFixed(1)}
+                            </span>
+                          </span>
+                          <span
+                            aria-hidden
+                            className="mt-1.5 block h-[3px] w-full bg-paper-sunk"
+                          >
+                            <span
+                              className={`block h-full ${
+                                routine.score >= 80
+                                  ? "bg-green"
+                                  : routine.score >= 55
+                                    ? "bg-rule-strong"
+                                    : "bg-coral"
+                              }`}
+                              style={{ width: `${Math.max(0, Math.min(100, routine.score))}%` }}
+                            />
+                          </span>
+                          <span className="mono-label mt-2 flex flex-wrap gap-x-3 gap-y-1 text-ink-faint">
+                            <span>{routine.stats.campus_days} days</span>
+                            <span title="Idle time between classes, counted only when it lasts a full class slot or more">
+                              {formatGap(routine.stats.gap_minutes)}
+                            </span>
+                            <span>{routine.stats.total_credits.toFixed(1)} cr</span>
+                          </span>
+                          <span className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
+                            {routine.courses.map((course) => (
+                              <span
+                                key={course.code}
+                                className="flex items-center gap-1 font-mono text-[0.65rem] text-ink-soft"
+                              >
+                                <span
+                                  aria-hidden
+                                  className={`h-1.5 w-1.5 rounded-full ${TONE_CLASS[toneFor(course.code)].dot}`}
+                                />
+                                {course.code}
+                                <span className="text-green-deep">·{course.section}</span>
+                              </span>
+                            ))}
+                          </span>
+                        </motion.button>
+                      </li>
+                    );
+                  })}
+                </ol>
 
               {pageError && (
-                <div role="alert" className="mt-3 border border-coral/60 bg-coral-tint/25 px-3 py-2.5">
+                <div role="alert" className="mx-3 mb-3 border border-coral/60 bg-coral-tint/25 px-3 py-2.5">
                   <p className="text-[0.8125rem] leading-relaxed text-ink-soft">
                     {pageError.message}
                   </p>
@@ -650,7 +675,10 @@ export function ResultsPanel({
                 </div>
               )}
 
-              <nav aria-label="Routine pages" className="mt-3 flex flex-wrap items-center gap-1.5">
+              <nav
+                aria-label="Plan pages"
+                className="flex flex-wrap items-center gap-1.5 border-t border-rule px-3 py-3"
+              >
                 <button
                   type="button"
                   onClick={() => onPageChange(page - 1)}
@@ -708,13 +736,14 @@ export function ResultsPanel({
                 </button>
               </nav>
 
-              {result.total_is_partial && (
-                <p className="mono-label mt-2 leading-relaxed text-ink-faint">
-                  The solver stopped at its search cap; the total is a lower bound.
-                </p>
-              )}
+                {result.total_is_partial && (
+                  <p className="mono-label border-t border-rule px-4 py-2.5 leading-relaxed text-ink-faint">
+                    The solver stopped at its search cap; the total is a lower bound.
+                  </p>
+                )}
+              </section>
 
-              <div className="mt-4 flex flex-wrap items-center gap-3">
+              <div className="flex flex-wrap items-center gap-3">
                 <button
                   type="button"
                   onClick={onBack}
@@ -731,35 +760,43 @@ export function ResultsPanel({
                   Re-run solver
                 </button>
               </div>
+            </aside>
+
+            <div className="order-1 min-w-0 lg:col-start-2 lg:row-start-1">
+              <AnimatePresence mode="wait" initial={false}>
+                {selected && (
+                  <motion.div
+                    key={selected.id}
+                    initial={reduceMotion ? false : panelVariants.enter}
+                    animate={panelVariants.center}
+                    exit={reduceMotion ? { opacity: 0 } : panelVariants.exit}
+                    transition={{
+                      duration: reduceMotion ? 0 : durations.panel,
+                      ease: [0.2, 0.7, 0.2, 1],
+                    }}
+                  >
+                    <RoutineDetail routine={selected} planName={planName} catalog={catalog} />
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
 
-            <AnimatePresence mode="wait" initial={false}>
-              {selected && (
-                <motion.div
-                  key={selected.id}
-                  initial={reduceMotion ? false : panelVariants.enter}
-                  animate={panelVariants.center}
-                  exit={reduceMotion ? { opacity: 0 } : panelVariants.exit}
-                  transition={{
-                    duration: reduceMotion ? 0 : durations.panel,
-                    ease: [0.2, 0.7, 0.2, 1],
-                  }}
-                >
-                  <RoutineDetail
-                    routine={selected}
-                    planName={planName}
-                    catalog={catalog}
-                    constraints={constraints}
-                    preferences={preferences}
-                    pendingSwap={pendingSwap}
-                    swapError={swapError}
-                    onSwap={onSwap}
-                    onMarkFull={onMarkFull}
-                    onRestoreSection={onRestoreSection}
-                  />
-                </motion.div>
-              )}
-            </AnimatePresence>
+            <aside
+              aria-label="Section board"
+              className="order-3 min-w-0 lg:col-start-1 lg:col-span-2 lg:row-start-2 xl:col-start-3 xl:col-span-1 xl:row-start-1 xl:sticky xl:top-4 xl:max-h-[calc(100vh-2rem)] xl:overflow-y-auto"
+            >
+              <SectionBoard
+                routine={selected ?? routines[0]}
+                catalog={catalog}
+                constraints={constraints}
+                preferences={preferences}
+                pending={pendingSwap}
+                error={swapError}
+                onSwap={onSwap}
+                onMarkFull={onMarkFull}
+                onRestore={onRestoreSection}
+              />
+            </aside>
           </div>
         </>
       )}

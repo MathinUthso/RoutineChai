@@ -31,6 +31,12 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     <html lang="en" className={`${display.variable} ${mono.variable} h-full`}>
       <body className="flex min-h-full flex-col bg-paper text-ink antialiased">
         <AmbientLedger />
+        <a
+          href="#main"
+          className="press sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:border focus:border-ink focus:bg-paper focus:px-3 focus:py-2 focus:text-[0.875rem] focus:text-ink"
+        >
+          Skip to content
+        </a>
         <div className="relative z-10 flex min-h-full flex-1 flex-col">{children}</div>
       </body>
     </html>

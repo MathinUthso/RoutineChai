@@ -106,7 +106,7 @@ export function CoursePicker({
                   onQueryChange("");
                 }
               }}
-              placeholder="Code, title or faculty"
+              placeholder="Code, title, or faculty…"
               autoComplete="off"
               spellCheck={false}
               className="h-10 w-full border border-rule bg-paper-raised pl-9 pr-12 text-[0.9375rem] text-ink transition-colors duration-[var(--duration-quick)] placeholder:text-ink-faint hover:border-rule-strong focus:border-green focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-green"

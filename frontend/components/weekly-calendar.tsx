@@ -10,6 +10,7 @@ import {
   formatTimeRange,
   minutesOfDay,
 } from "@/lib/schedule";
+import { TONE_CLASS, toneFor, type Tone } from "@/lib/course-tone";
 import type { Day, Meeting, Routine, RoutineCourse } from "@/lib/types";
 
 /** Teaching day window: first bell 08:30, last dismissal 16:30. */
@@ -20,29 +21,6 @@ const BODY_HEIGHT = "30rem";
 const TIP_WIDTH = 264;
 /** Shortest sliver drawn for a meeting clamped entirely outside the window. */
 const MIN_SLIVER = 20;
-
-type Tone = "clay" | "moss" | "slate" | "sand" | "rose" | "iris";
-
-/** Deterministic, low-saturation course tints defined in app/globals.css. */
-const TONE_CLASS: Record<Tone, { block: string; code: string }> = {
-  clay: { block: "bg-course-clay border-l-course-clay-ink", code: "text-course-clay-ink" },
-  moss: { block: "bg-course-moss border-l-course-moss-ink", code: "text-course-moss-ink" },
-  slate: { block: "bg-course-slate border-l-course-slate-ink", code: "text-course-slate-ink" },
-  sand: { block: "bg-course-sand border-l-course-sand-ink", code: "text-course-sand-ink" },
-  rose: { block: "bg-course-rose border-l-course-rose-ink", code: "text-course-rose-ink" },
-  iris: { block: "bg-course-iris border-l-course-iris-ink", code: "text-course-iris-ink" },
-};
-
-const TONES = Object.keys(TONE_CLASS) as Tone[];
-
-function toneFor(code: string): Tone {
-  let hash = 2166136261;
-  for (let index = 0; index < code.length; index += 1) {
-    hash ^= code.charCodeAt(index);
-    hash = Math.imul(hash, 16777619);
-  }
-  return TONES[(hash >>> 0) % TONES.length];
-}
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);

@@ -89,6 +89,7 @@ The UI is a three-step flow: **Courses → Constraints → Timetable**. Programs
 
 The timetable step is built for fast section picking:
 
+- **Three rails** — live constraints and the plan list on the left, the plan and its weekly grid in the middle, the section board on the right. Explanations live in tooltips and metadata rows instead of paragraphs.
 - **Live constraints** — four sliders (longest single gap, latest end time, campus days, classes per day) re-rank the plans on the server as they move; the previous list stays on screen while the solver works.
 - **Plans and backups** — every ranked routine is one complete section combination, labelled `Plan A`, `Plan B`, `Plan C`, and so on. The rest of the list is the backup ladder, and paging walks the remaining combinations.
 - **Section board** — for the open plan, every catalog section of every course is listed as *current*, *ready to swap*, *conditional*, *conflict*, or *marked full*. Swapping one section re-scores the plan server-side; marking a section full removes it from the solver and re-ranks the remaining combinations, which is how a student falls back from Plan A to Plan B when the registrar fills a section.

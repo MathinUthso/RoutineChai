@@ -136,6 +136,20 @@
     scrollbar-width: thin;
   }
 
+  /* Touch targets should act immediately, not wait out the double-tap delay. */
+  :where(a, button, input, select, textarea, label, [tabindex]) {
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: color-mix(in srgb, var(--green) 18%, transparent);
+  }
+
+  /* Headings read as blocks, not as ragged line fragments. */
+  h1,
+  h2,
+  h3,
+  h4 {
+    text-wrap: balance;
+  }
+
   ::-webkit-scrollbar {
     width: 11px;
     height: 11px;
@@ -211,7 +225,11 @@
 
   .ledger-range::-webkit-slider-runnable-track {
     height: 3px;
-    background: var(--rule-strong);
+    background: linear-gradient(
+      to right,
+      var(--green) var(--fill, 0%),
+      var(--rule-strong) var(--fill, 0%)
+    );
   }
 
   .ledger-range::-webkit-slider-thumb {
@@ -238,6 +256,11 @@
   .ledger-range::-moz-range-track {
     height: 3px;
     background: var(--rule-strong);
+  }
+
+  .ledger-range::-moz-range-progress {
+    height: 3px;
+    background: var(--green);
   }
 
   .ledger-range::-moz-range-thumb {
@@ -280,6 +303,12 @@
     color-mix(in srgb, var(--ink) 3.5%, transparent) 0 1px,
     transparent 1px 32px
   );
+}
+
+/* Long section lists skip layout work until they scroll into view. */
+@utility ledger-auto {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 96px;
 }
 
 @media (prefers-reduced-motion: reduce) {

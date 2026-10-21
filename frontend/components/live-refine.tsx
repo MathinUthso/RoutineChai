@@ -26,6 +26,7 @@ function endMinutes(value: string | null): number {
 }
 
 function Slider({
+  name,
   label,
   value,
   min,
@@ -36,6 +37,7 @@ function Slider({
   maximumLabel,
   onChange,
 }: {
+  name: string;
   label: string;
   value: number;
   min: number;
@@ -46,14 +48,17 @@ function Slider({
   maximumLabel: string;
   onChange: (value: number) => void;
 }) {
+  const fill = max === min ? 0 : ((value - min) / (max - min)) * 100;
+
   return (
-    <label className="grid gap-2">
+    <label className="grid gap-1.5">
       <span className="flex items-baseline justify-between gap-3">
         <span className="mono-label text-ink-faint">{label}</span>
-        <span className="font-mono text-[0.7rem] tabular text-ink">{valueLabel}</span>
+        <span className="font-mono text-[0.6875rem] tabular text-ink">{valueLabel}</span>
       </span>
       <input
         type="range"
+        name={name}
         min={min}
         max={max}
         step={step}
@@ -61,6 +66,7 @@ function Slider({
         aria-valuetext={valueLabel}
         onChange={(event) => onChange(Number(event.target.value))}
         className="ledger-range w-full"
+        style={{ "--fill": `${fill}%` } as React.CSSProperties}
       />
       <span className="flex justify-between font-mono text-[0.5625rem] uppercase tracking-[0.1em] text-ink-faint">
         <span>{minimumLabel}</span>
@@ -84,52 +90,32 @@ export function LiveRefine({ constraints, busy, error, onChange }: LiveRefinePro
   return (
     <section
       aria-labelledby="live-refine-title"
-      className="mt-5 border border-rule bg-paper-raised shadow-sheet"
+      className="border border-rule bg-paper-raised shadow-sheet"
     >
-      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b border-rule px-4 py-3">
-        <div>
-          <h3 id="live-refine-title" className="mono-label text-ink">
-            Live constraints
-          </h3>
-          <p className="mt-1 max-w-[58ch] text-[0.8125rem] leading-relaxed text-ink-faint">
-            Slide a rule and the plans re-rank. The last good list stays visible while the solver
-            works.
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-3">
-          <span
-            className={`mono-label tabular ${busy ? "text-green" : "text-ink-faint"}`}
-            aria-live="polite"
-          >
-            {busy ? "Re-ranking…" : activeCount > 0 ? `${activeCount} active` : "Open"}
-          </span>
-          <button
-            type="button"
-            disabled={activeCount === 0 || busy}
-            onClick={() =>
-              onChange({
-                ...constraints,
-                max_gap_minutes: null,
-                max_campus_days: null,
-                latest_end: null,
-                max_sessions_per_day: 3,
-              })
-            }
-            className="mono-label inline-flex min-h-9 items-center border border-rule-strong px-2.5 text-ink transition-colors hover:border-ink hover:bg-paper disabled:cursor-not-allowed disabled:border-rule disabled:text-ink-faint"
-          >
-            Clear live rules
-          </button>
-        </div>
+      <div className="flex items-baseline justify-between gap-3 border-b border-rule px-4 py-2.5">
+        <h3
+          id="live-refine-title"
+          className="mono-label text-ink"
+          title="Slide a rule and the plans re-rank. The last good list stays visible while the solver works."
+        >
+          Live constraints
+        </h3>
+        <span className="mono-label tabular text-ink-faint" aria-live="polite">
+          {busy ? "Re-ranking…" : activeCount > 0 ? `${activeCount} active` : "Open"}
+        </span>
       </div>
 
-      <div className="grid gap-x-7 gap-y-5 px-4 py-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-x-5 gap-y-4 px-4 py-4">
         <Slider
+          name="max-gap"
           label="Longest gap"
           value={gapValue}
           min={0}
           max={GAP_MAX}
           step={15}
-          valueLabel={gapValue >= GAP_MAX ? "No cap" : gapValue === 0 ? "No gap" : `≤ ${formatGap(gapValue)}`}
+          valueLabel={
+            gapValue >= GAP_MAX ? "No cap" : gapValue === 0 ? "No gap" : `≤ ${formatGap(gapValue)}`
+          }
           minimumLabel="No gap"
           maximumLabel="Any"
           onChange={(value) =>
@@ -137,6 +123,7 @@ export function LiveRefine({ constraints, busy, error, onChange }: LiveRefinePro
           }
         />
         <Slider
+          name="latest-end"
           label="Latest end"
           value={endValue}
           min={END_MIN}
@@ -150,12 +137,15 @@ export function LiveRefine({ constraints, busy, error, onChange }: LiveRefinePro
           }
         />
         <Slider
+          name="campus-days"
           label="Campus days"
           value={daysValue}
           min={1}
           max={5}
           step={1}
-          valueLabel={daysValue >= 5 ? "No cap" : `≤ ${daysValue} ${daysValue === 1 ? "day" : "days"}`}
+          valueLabel={
+            daysValue >= 5 ? "No cap" : `≤ ${daysValue} ${daysValue === 1 ? "day" : "days"}`
+          }
           minimumLabel="1 day"
           maximumLabel="Any"
           onChange={(value) =>
@@ -163,6 +153,7 @@ export function LiveRefine({ constraints, busy, error, onChange }: LiveRefinePro
           }
         />
         <Slider
+          name="classes-per-day"
           label="Classes / day"
           value={sessionValue}
           min={1}
@@ -175,8 +166,31 @@ export function LiveRefine({ constraints, busy, error, onChange }: LiveRefinePro
         />
       </div>
 
+      <div className="flex items-center justify-between gap-3 border-t border-rule px-4 py-2.5">
+        <span className="mono-label text-ink-faint">Re-ranks live</span>
+        <button
+          type="button"
+          disabled={activeCount === 0 || busy}
+          onClick={() =>
+            onChange({
+              ...constraints,
+              max_gap_minutes: null,
+              max_campus_days: null,
+              latest_end: null,
+              max_sessions_per_day: 3,
+            })
+          }
+          className="mono-label inline-flex min-h-9 items-center border border-rule-strong px-2.5 text-ink transition-colors hover:border-ink hover:bg-paper disabled:cursor-not-allowed disabled:border-rule disabled:text-ink-faint"
+        >
+          Clear rules
+        </button>
+      </div>
+
       {error && (
-        <p role="alert" className="border-t border-coral/50 px-4 py-2 text-[0.8125rem] text-coral-ink">
+        <p
+          role="alert"
+          className="border-t border-coral/50 px-4 py-2 text-[0.8125rem] text-coral-ink"
+        >
           {error}
         </p>
       )}
