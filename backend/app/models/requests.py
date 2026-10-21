@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from app.models.catalog import Day, Meeting
+from app.models.catalog import Day, Meeting, Program
 
 DEFAULT_ALLOWED_DAYS: tuple[Day, ...] = ("Sat", "Sun", "Mon", "Tue", "Wed")
 TIME_PATTERN = r"^(?:[01]\d|2[0-3]):[0-5]\d$"
@@ -30,6 +30,7 @@ class SelectedCourse(BaseModel):
 
     code: str
     allowed_sections: list[str] | None = None
+    excluded_sections: list[str] | None = None
     preferred_faculty: list[str] | None = None
     excluded_faculty: list[str] | None = None
     manual_project: ManualProject | None = None
@@ -51,16 +52,25 @@ class Constraints(BaseModel):
     allowed_days: list[Day] = Field(default_factory=lambda: list(DEFAULT_ALLOWED_DAYS))
     time_preference: Literal["morning", "afternoon", "any"] = "any"
     preferred_off_days: list[Day] = Field(default_factory=list)
+    # Live refinements shown on the timetable tab. None means "no cap".
+    max_gap_minutes: int | None = Field(default=None, ge=0, le=24 * 60)
+    max_campus_days: int | None = Field(default=None, ge=1, le=5)
+    latest_end: str | None = Field(default=None, pattern=TIME_PATTERN)
 
 
 class GenerateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    program: Literal["BSCSE", "BSDS"]
+    programs: list[Program] = Field(min_length=1)
     courses: list[SelectedCourse] = Field(min_length=1)
     constraints: Constraints = Field(default_factory=Constraints)
     limit: int = Field(default=10, ge=1, le=50)
     offset: int = Field(default=0, ge=0, le=100_000)
+
+    @field_validator("programs")
+    @classmethod
+    def dedupe_programs(cls, value: list[Program]) -> list[Program]:
+        return list(dict.fromkeys(value))
 
 
 class RoutineCourse(BaseModel):

@@ -36,10 +36,10 @@ Repo-local subagents are configured in `.opencode/agents/`. Main agent plans and
 - **Python env**: `.venv` at the repository root; run Python as `..\.venv\Scripts\python.exe` from `backend/`.
 - **Backend tests**: `cd backend; ..\.venv\Scripts\python.exe -m pytest -q`.
 - **Run API**: `cd backend; ..\.venv\Scripts\uvicorn.exe app.main:app --reload --port 8000`.
-- **Rebuild catalog**: `.\\.venv\\Scripts\\python.exe backend\\scripts\\extract_routine.py --pdf "doc\\Class Routine with faculty assign Fall 2026.pdf"`.
+- **Rebuild catalog**: `.\\.venv\\Scripts\\python.exe backend\\scripts\\extract_routine.py --pdf "doc\\Class Routine with faculty assign Fall 2026.pdf" --eee-pdf "doc\\EEEfall26classroutine.pdf"`.
 - **Generated artifacts**: `backend/app/data/routine.json` and `parse_report.json` are committed; do not hand-edit them.
 - **Teaching week**: Saturday through Wednesday only; Thursday and Friday are weekends.
-- **Data snapshot**: 791 rows, 303 repairs, 0 skips, 101 courses, 791 sections; three expected warnings are documented in `README.md`.
+- **Data snapshot**: 917 rows, 303 repairs, 0 skips, 161 courses, 917 sections, 1,507 meetings; four expected warnings are documented in `README.md`. Programs: `BSCSE`, `BSDS`, `BSEEE`; requests carry a `programs` list.
 - **Frontend API base**: `NEXT_PUBLIC_API_BASE_URL` (default `http://localhost:8000`); backend CORS defaults to `http://localhost:3000`.
 
 ## Rules of Engagement

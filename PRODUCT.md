@@ -24,10 +24,10 @@ Students work from the registrar PDF and the generated catalog. The teaching wee
 
 ## Capabilities and Constraints
 
-- Browse and search the Fall 2026 catalog for BSCSE and BSDS, with course, section, faculty, room, and meeting details.
+- Browse and search the Fall 2026 catalog for BSCSE, BSDS, and BSEEE, with course, section, faculty, room, and meeting details. Program selection is multi-select; the default is BSCSE only.
 - Select courses, pin allowed sections, prefer or exclude faculty, block time windows, cap sessions per day, choose allowed days, and set morning/afternoon, compactness, off-day, and preferred-faculty preferences.
 - Return numbered server-backed pages of 10 ranked routines with a Sat–Wed weekly grid, section/faculty details, readable 12-hour time cues, and score breakdowns.
-- Let students enter a project section and one weekly meeting for `CSE 4000A` or `DS 4000A`; the manual slot replaces catalog sections, inherits official faculty when the section matches, and participates in clash checks.
+- Let students enter a project section and one weekly meeting for `CSE 4000A`, `DS 4000A`, or `EEE 4902`; the manual slot replaces catalog sections, inherits official faculty when the section matches, and participates in clash checks.
 - Export every meeting in a routine as a weekly recurring `.ics` calendar, starting at the next occurrence and marked for registrar verification.
 - Hard constraints: exactly one section per selected course, no overlapping meetings, blocked windows excluded, allowed teaching days only, session caps, program eligibility, conditional sections excluded unless explicitly allowed, and excluded faculty removed even when a section is pinned. Manual project meetings obey the same checks.
 - Conditional (`if_required`) sections stay hidden by default and are considered only when explicitly pinned.
@@ -41,9 +41,10 @@ Students work from the registrar PDF and the generated catalog. The teaching wee
 
 ## Evidence on Hand
 
-- `doc/Class Routine with faculty assign Fall 2026.pdf` — source registrar PDF.
-- `backend/app/data/routine.json` — generated catalog: 791 rows, 303 repairs, 0 skips, 101 courses, 791 sections, 1,296 meetings.
-- `backend/app/data/parse_report.json` — extraction report with three known warnings: SL 436 truncated faculty/credit line, SL 723 missing room (`TBA`), SL 750 missing faculty (`TBA`).
+- `doc/Class Routine with faculty assign Fall 2026.pdf` — CSE/DS source registrar PDF.
+- `doc/EEEfall26classroutine.pdf` — BSEEE source offering PDF.
+- `backend/app/data/routine.json` — generated catalog: 917 rows, 303 repairs, 0 skips, 161 courses, 917 sections, 1,507 meetings.
+- `backend/app/data/parse_report.json` — extraction report with four known warnings: SL 436 truncated faculty/credit line, SL 723 missing room (`TBA`), SL 750 missing faculty (`TBA`), and EEE 4902 without a meeting time.
 - `frontend/public/assets/uiu-buildings.webp` — cropped, transparent-sky UIU campus illustration used by the header.
 - `assets/uiu.svg` — supplied UIU campus illustration source.
 - The supplied throw and blast Lottie files are not used by the current header.

@@ -19,7 +19,7 @@ from app.models.requests import (
 
 NODE_LIMIT = 200_000
 TIME_LIMIT_SECONDS = 2.0
-PROJECT_COURSE_CODES = frozenset({"CSE 4000A", "DS 4000A"})
+PROJECT_COURSE_CODES = frozenset({"CSE 4000A", "DS 4000A", "EEE 4902"})
 
 WINDOWS: dict[str, tuple[int, int]] = {
     "morning": (8 * 60 + 30, 12 * 60 + 30),
@@ -52,6 +52,7 @@ class _Metrics:
     off_days: float
     campus_days: int
     gap_minutes: int
+    longest_gap: int
     total_credits: int
     earliest: str | None
     latest: str | None
@@ -70,6 +71,7 @@ class _Metrics:
 
 def generate(catalog: Catalog, request: GenerateRequest) -> GenerateResult:
     by_code = {course.code.strip(): course for course in catalog.courses}
+    programs = set(request.programs)
     selected: list[tuple[Course, SelectedCourse]] = []
     excluded: list[str] = []
     seen_codes: set[str] = set()
@@ -81,7 +83,7 @@ def generate(catalog: Catalog, request: GenerateRequest) -> GenerateResult:
         course = by_code.get(code)
         if course is None:
             raise ValueError(f"unknown course: {item.code}")
-        if request.program not in course.programs:
+        if not programs.intersection(course.programs):
             excluded.append(code)
             continue
         if item.manual_project is not None and code not in PROJECT_COURSE_CODES:
@@ -97,7 +99,7 @@ def generate(catalog: Catalog, request: GenerateRequest) -> GenerateResult:
                 reason="courses_without_candidates",
                 courses_without_candidates=excluded,
                 conflicting_pairs=[],
-                message=f"Not offered to {request.program}: " + ", ".join(excluded),
+                message=f"Not offered to {', '.join(request.programs)}: " + ", ".join(excluded),
             )
         ]
     else:
@@ -112,7 +114,7 @@ def generate(catalog: Catalog, request: GenerateRequest) -> GenerateResult:
                     reason="no_solution",
                     courses_without_candidates=[],
                     conflicting_pairs=[],
-                    message=f"No requested course is offered to {request.program}.",
+                    message=f"No requested course is offered to {', '.join(request.programs)}.",
                 )
             ],
             truncated=False,
@@ -156,8 +158,14 @@ def generate(catalog: Catalog, request: GenerateRequest) -> GenerateResult:
         if preferred:
             faculty_prefs[course.code.strip()] = preferred
 
+    slot_minutes = _slot_minutes(catalog)
     solutions, total, capped = _search(
-        candidates, codes, request, faculty_prefs, time.monotonic() + TIME_LIMIT_SECONDS
+        candidates,
+        codes,
+        request,
+        faculty_prefs,
+        slot_minutes,
+        time.monotonic() + TIME_LIMIT_SECONDS,
     )
     truncated = capped or total > request.offset + len(solutions)
     if not solutions:
@@ -183,7 +191,7 @@ def generate(catalog: Catalog, request: GenerateRequest) -> GenerateResult:
             limit=request.limit,
         )
 
-    routines = [_routine(solution, request, faculty_prefs) for solution in solutions]
+    routines = [_routine(solution, request, faculty_prefs, slot_minutes) for solution in solutions]
     return GenerateResult(
         routines=routines,
         diagnostics=excluded_diagnostics,
@@ -204,6 +212,28 @@ def _format(minutes: int) -> str:
     return f"{minutes // 60:02d}:{minutes % 60:02d}"
 
 
+def _slot_minutes(catalog: Catalog) -> int:
+    """Shortest meeting in the catalog, i.e. one standard class slot.
+
+    Idle time shorter than a slot is a seam between back-to-back periods, not
+    a gap a student can use.
+    """
+    durations = [
+        _minutes(meeting.end) - _minutes(meeting.start)
+        for course in catalog.courses
+        for section in course.sections
+        for meeting in section.meetings
+        if _minutes(meeting.end) > _minutes(meeting.start)
+    ]
+    return min(durations) if durations else 0
+
+
+def _latest_end_minutes(constraints: Constraints) -> int | None:
+    if constraints.latest_end is None:
+        return None
+    return _minutes(constraints.latest_end)
+
+
 def _blocked_masks(constraints: Constraints) -> dict[str, int]:
     masks: dict[str, int] = {}
     for interval in constraints.blocked:
@@ -222,6 +252,7 @@ def _candidate(
     allowed_days: set[str],
     blocked: dict[str, int],
     max_sessions: int,
+    latest_end: int | None = None,
     manual: bool = False,
 ) -> _Candidate | None:
     meetings: list[Interval] = []
@@ -233,6 +264,8 @@ def _candidate(
         start = _minutes(meeting.start)
         end = _minutes(meeting.end)
         if end <= start:
+            return None
+        if latest_end is not None and end > latest_end:
             return None
         mask = ((1 << (end - start)) - 1) << start
         if mask & blocked.get(meeting.day, 0):
@@ -320,6 +353,7 @@ def _manual_project_candidates(
         set(constraints.allowed_days),
         blocked,
         constraints.max_sessions_per_day,
+        latest_end=_latest_end_minutes(constraints),
         manual=True,
     )
     return [candidate] if candidate is not None else []
@@ -336,10 +370,16 @@ def _course_candidates(
 
     allowed = {name.strip().casefold() for name in selected.allowed_sections or [] if name.strip()}
     excluded = {name.strip().casefold() for name in selected.excluded_faculty or [] if name.strip()}
+    excluded_sections = {
+        name.strip().casefold() for name in selected.excluded_sections or [] if name.strip()
+    }
     allowed_days = set(constraints.allowed_days)
+    latest_end = _latest_end_minutes(constraints)
     result: list[_Candidate] = []
     seen: set[tuple] = set()
     for section in sorted(course.sections, key=lambda item: item.name):
+        if section.name.strip().casefold() in excluded_sections:
+            continue
         if excluded and _faculty_tokens(section) & excluded:
             continue
         if allowed:
@@ -347,7 +387,14 @@ def _course_candidates(
                 continue
         elif section.if_required:
             continue
-        candidate = _candidate(course, section, allowed_days, blocked, constraints.max_sessions_per_day)
+        candidate = _candidate(
+            course,
+            section,
+            allowed_days,
+            blocked,
+            constraints.max_sessions_per_day,
+            latest_end=latest_end,
+        )
         if candidate is None:
             continue
         if not allowed:
@@ -399,6 +446,7 @@ def _search(
     codes: list[str],
     request: GenerateRequest,
     faculty_prefs: dict[str, set[str]],
+    slot_minutes: int,
     deadline: float,
 ) -> tuple[list[tuple[_Candidate, ...]], int, bool]:
     keep = request.offset + request.limit
@@ -427,8 +475,10 @@ def _search(
             if key in seen:
                 return
             seen.add(key)
+            metrics = _metrics(solution, request.constraints, faculty_prefs, slot_minutes)
+            if not _fits_live_limits(metrics, request.constraints):
+                return
             total += 1
-            metrics = _metrics(solution, request.constraints, faculty_prefs)
             best.append((metrics.score, key, solution))
             if len(best) > max(4 * keep, 32):
                 best.sort(key=lambda entry: (-entry[0], entry[1]))
@@ -468,6 +518,7 @@ def _metrics(
     solution: tuple[_Candidate, ...],
     constraints: Constraints,
     faculty_prefs: dict[str, set[str]],
+    slot_minutes: int,
 ) -> _Metrics:
     meetings = [meeting for candidate in solution for meeting in candidate.meetings]
     total_minutes = sum(end - start for _, start, end in meetings)
@@ -496,10 +547,17 @@ def _metrics(
     for day, start, end in meetings:
         by_day.setdefault(day, []).append((start, end))
     gap_minutes = 0
+    longest_gap = 0
     for intervals in by_day.values():
         intervals.sort()
         for (_, previous_end), (next_start, _) in zip(intervals, intervals[1:]):
-            gap_minutes += max(0, next_start - previous_end)
+            gap = max(0, next_start - previous_end)
+            # Seams between adjacent periods are shorter than a class slot and
+            # do not count as idle time.
+            if slot_minutes and gap < slot_minutes:
+                continue
+            gap_minutes += gap
+            longest_gap = max(longest_gap, gap)
 
     campus_days = len(by_day)
     compactness = max(0.0, 100.0 - gap_minutes / 2.0)
@@ -520,18 +578,29 @@ def _metrics(
         off_days=off_score,
         campus_days=campus_days,
         gap_minutes=gap_minutes,
+        longest_gap=longest_gap,
         total_credits=sum(candidate.credits for candidate in solution),
         earliest=_format(min(start for _, start, _ in meetings)) if meetings else None,
         latest=_format(max(end for _, _, end in meetings)) if meetings else None,
     )
 
 
+def _fits_live_limits(metrics: _Metrics, constraints: Constraints) -> bool:
+    """Apply the refinements that depend on the finished solution."""
+    if constraints.max_gap_minutes is not None and metrics.longest_gap > constraints.max_gap_minutes:
+        return False
+    if constraints.max_campus_days is not None and metrics.campus_days > constraints.max_campus_days:
+        return False
+    return True
+
+
 def _routine(
     solution: tuple[_Candidate, ...],
     request: GenerateRequest,
     faculty_prefs: dict[str, set[str]],
+    slot_minutes: int,
 ) -> Routine:
-    metrics = _metrics(solution, request.constraints, faculty_prefs)
+    metrics = _metrics(solution, request.constraints, faculty_prefs, slot_minutes)
     return Routine(
         id="|".join(f"{candidate.code}={candidate.section.name}" for candidate in solution),
         score=metrics.score,

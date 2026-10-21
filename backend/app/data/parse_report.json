@@ -1,24 +1,33 @@
 {
   "term": "Fall 2026",
-  "source": "Class Routine with faculty assign Fall 2026.pdf",
-  "rows": 791,
+  "source": "Class Routine with faculty assign Fall 2026.pdf + EEEfall26classroutine.pdf",
+  "rows": 917,
   "repaired": 303,
   "skipped": 0,
   "warnings": [
     {
+      "source": "Class Routine with faculty assign Fall 2026.pdf",
       "sl": 436,
       "page": 15,
       "reason": "pdfium line truncated; repaired from primary row"
     },
     {
+      "source": "Class Routine with faculty assign Fall 2026.pdf",
       "sl": 723,
       "page": 25,
       "reason": "room missing; recorded as TBA"
     },
     {
+      "source": "Class Routine with faculty assign Fall 2026.pdf",
       "sl": 750,
       "page": 26,
       "reason": "faculty missing; recorded as TBA"
+    },
+    {
+      "source": "EEEfall26classroutine.pdf",
+      "sl": 86,
+      "page": 3,
+      "reason": "no meeting time in source; recorded without meetings"
     }
   ]
 }

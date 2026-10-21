@@ -5,6 +5,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict
 
 Day = Literal["Sat", "Sun", "Mon", "Tue", "Wed"]
+Program = Literal["BSCSE", "BSDS", "BSEEE"]
 
 
 class Meeting(BaseModel):
@@ -38,7 +39,7 @@ class Course(BaseModel):
     code: str
     title: str
     credits: int
-    programs: list[Literal["BSCSE", "BSDS"]]
+    programs: list[Program]
     kind: Literal["theory", "lab"]
     sections: list[Section]
 
@@ -47,7 +48,7 @@ class Catalog(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     term: str
-    programs: list[str]
+    programs: list[Program]
     generated_at: str
     source: str
     courses: list[Course]

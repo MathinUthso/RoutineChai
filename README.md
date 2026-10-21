@@ -85,14 +85,14 @@ Open `http://localhost:3000`.
 
 If the frontend runs on a different origin, add it to the backend's comma-separated `ALLOWED_ORIGINS` environment variable.
 
-The UI is a three-step flow: **Courses → Constraints → Timetable**. The results step shows numbered server-backed pages of 10 ranked routines, a Sat–Wed week grid, section/faculty details, and score breakdowns. Each routine can be downloaded as a weekly Google Calendar `.ics` file.
+The UI is a three-step flow: **Courses → Constraints → Timetable**. Programs are a multi-select (BSCSE default, BSDS and BSEEE optional), so a student can combine courses from more than one program. The results step shows numbered server-backed pages of 10 ranked routines, a Sat–Wed week grid, section/faculty details, and score breakdowns. Each routine can be downloaded as a weekly Google Calendar `.ics` file.
 
 ## Data Pipeline
 
-The committed catalog is generated from the registrar PDF:
+The committed catalog is generated from the two registrar PDFs:
 
 ```powershell
-.\.venv\Scripts\python.exe backend\scripts\extract_routine.py --pdf "doc\Class Routine with faculty assign Fall 2026.pdf"
+.\.venv\Scripts\python.exe backend\scripts\extract_routine.py --pdf "doc\Class Routine with faculty assign Fall 2026.pdf" --eee-pdf "doc\EEEfall26classroutine.pdf"
 ```
 
 Outputs:
@@ -102,21 +102,24 @@ Outputs:
 
 Current extraction result:
 
-- 791 of 791 table rows parsed.
-- 303 rows repaired from the clean pdfium line.
+- 917 of 917 offering rows parsed.
+- 303 CSE/DS rows repaired from the clean pdfium line.
 - 0 rows skipped.
-- 101 courses, 791 sections, 1,296 meetings.
-- Programs: `BSCSE`, `BSDS`.
+- 161 courses, 917 sections, 1,507 meetings.
+- Programs: `BSCSE`, `BSDS`, `BSEEE`.
 
-The PDF overlays text runs, so a single extractor is not reliable. The parser uses pdfplumber for table structure, validates each row, and repairs ambiguous rows from pypdfium2 full-page text keyed by serial number. It merges duplicate sections by course code and rejects conflicting duplicates.
+The CSE/DS PDF overlays text runs, so a single extractor is not reliable. That parser uses pdfplumber for table structure, validates each row, and repairs ambiguous rows from pypdfium2 full-page text keyed by serial number. It merges duplicate sections by course code and rejects conflicting duplicates.
+
+The BSEEE offering PDF is read line by line with pypdfium2. Its day cells are abbreviated pairs sharing one time: `S W` means Sunday + Wednesday, `Sat T` means Saturday + Tuesday. A course code that appears in both PDFs is merged into one entry: programs, sections, and meetings are unioned, while conflicting titles, credits, or section meetings fail the build. Shared service courses such as `BDS 1201`, `ENG 1011`, and `ENG 1013` keep course-level program tags, so a section is selectable when its course is tagged for at least one selected program.
 
 ### Known data caveats
 
-`parse_report.json` records three expected warnings:
+`parse_report.json` records four expected warnings:
 
 - **SL 436** — the pdfium line is truncated before the faculty/credit; repaired from the primary row.
 - **SL 723** — room is missing; recorded as `TBA`.
 - **SL 750** — faculty is missing; recorded as `TBA`.
+- **EEE 4902** — the EEE PDF has no meeting time; imported with no meetings and offered as a manual project slot.
 
 Seven sections are marked `if_required` (conditional). They are hidden by default and are only considered when explicitly pinned in a request.
 
@@ -137,7 +140,7 @@ Always verify the generated schedule against the official registrar notice befor
 
 ```json
 {
-  "program": "BSCSE",
+  "programs": ["BSCSE"],
   "courses": [
     { "code": "CSE 1111" },
     { "code": "CSE 1112", "allowed_sections": ["F"] },
@@ -166,7 +169,9 @@ Always verify the generated schedule against the official registrar notice befor
 
 A feasible request returns HTTP 200 with ranked `routines`, `total`, `offset`, `limit`, `truncated`, and `total_is_partial`. `truncated` means more routines exist beyond this page; `total_is_partial` means the solver hit its search cap and `total` is a lower bound. An infeasible request also returns HTTP 200, with `routines: []` and `diagnostics`; invalid payloads and unknown courses return HTTP 422.
 
-`manual_project` is limited to `CSE 4000A` and `DS 4000A`. It replaces the registrar sections for that course with one student-entered weekly meeting, inherits the official faculty when the section matches the catalog, uses `TBA` otherwise, and participates in clash and exclusion checks. Room is always `TBA`.
+`programs` accepts one or more of `BSCSE`, `BSDS`, `BSEEE`; duplicates are collapsed. Any course tagged for at least one selected program is eligible. The UI defaults to `BSCSE` only and shows every program tagged in the catalog.
+
+`manual_project` is limited to `CSE 4000A`, `DS 4000A`, and `EEE 4902`. It replaces the registrar sections for that course with one student-entered weekly meeting, inherits the official faculty when the section matches the catalog, uses `TBA` otherwise, and participates in clash and exclusion checks. Room is always `TBA`.
 
 ### Hard constraints
 
@@ -175,7 +180,7 @@ A feasible request returns HTTP 200 with ranked `routines`, `total`, `offset`, `
 - Blocked day/time windows are excluded.
 - Meetings must fall on allowed teaching days.
 - At most `max_sessions_per_day` meetings per day.
-- Course must be offered to the selected program.
+- Course must be offered to at least one selected program.
 - Conditional (`if_required`) sections are excluded unless explicitly allowed.
 - Sections taught by `excluded_faculty` are removed, even when pinned.
 - Manual project meetings replace the catalog sections and still obey clash, day, session-cap, and faculty-exclusion rules.
@@ -189,6 +194,8 @@ The scheduler ranks valid routines by weighted preferences for:
 - Compactness (less idle time on campus).
 - Fewer campus days.
 - Preferred off days.
+
+An idle gap is free time between classes on the same day that lasts at least one class slot — the shortest meeting in the catalog, 79 minutes for Fall 2026. Shorter seams between back-to-back periods are not counted in `gap_minutes` or in compactness.
 
 `limit` accepts 1–50 and `offset` selects the server-side page. Results are deterministic for the same catalog and request.
 
@@ -211,7 +218,7 @@ frontend/
   components/     Course picker, constraints, results, ledger UI
   lib/            API client, shared types, schedule helpers, motion tokens
 
-doc/              Source registrar PDF
+doc/              Source registrar PDFs
 ```
 
 ## Verification
@@ -223,7 +230,7 @@ cd backend
 ..\.venv\Scripts\python.exe -m pytest -q
 ```
 
-Current suite: **77 passed**. It covers parser schema and PDF spot checks, hard-constraint rejection, soft-constraint ranking, randomized validity, pinned-section identity, program diagnostics, and API contracts.
+Current suite: **122 passed**. It covers parser schema and PDF spot checks, BSEEE parsing and catalog merging, hard-constraint rejection, multi-program eligibility, gap classification, soft-constraint ranking, randomized validity, pinned-section identity, program diagnostics, and API contracts.
 
 Frontend:
 

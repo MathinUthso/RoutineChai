@@ -1,6 +1,6 @@
 {
   "valid": {
-    "program": "BSCSE",
+    "programs": ["BSCSE"],
     "courses": [
       {"code": "CSE 1111", "allowed_sections": ["A"]},
       {"code": "CSE 1112"},
@@ -17,7 +17,7 @@
     "limit": 5
   },
   "no_solution": {
-    "program": "BSCSE",
+    "programs": ["BSCSE"],
     "courses": [{"code": "CSE 2213"}],
     "constraints": {
       "blocked": [],

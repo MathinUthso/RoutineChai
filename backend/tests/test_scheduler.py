@@ -4,7 +4,7 @@ Schema under test (see ``tests/fixtures/*.json``):
   catalog: term / programs / generated_at / source / courses
   course:  code / title / credits / programs / kind / sections
   section: name / if_required / faculty{name,initials} / meetings[{day,start,end,room}]
-  request: program / courses[{code,allowed_sections?,preferred_faculty?,excluded_faculty?}] /
+  request: programs / courses[{code,allowed_sections?,preferred_faculty?,excluded_faculty?}] /
            constraints{blocked,max_sessions_per_day,allowed_days,
                        time_preference,preferred_off_days} / limit
 
@@ -27,6 +27,7 @@ ALL_DAYS = ["Sat", "Sun", "Mon", "Tue", "Wed"]
 DAY_SET = set(ALL_DAYS)
 BSCSE = "BSCSE"
 BSDS = "BSDS"
+BSEEE = "BSEEE"
 COURSE_CODE = re.compile(r"^[A-Z]{2,4} \d{4}$")
 _MISSING = object()
 
@@ -203,7 +204,7 @@ def _course(code, title, credits, kind, sections, programs=(BSCSE,)):
 def _catalog(*courses):
     return {
         "term": "Fall 2026",
-        "programs": [BSCSE, BSDS],
+        "programs": [BSCSE, BSDS, BSEEE],
         "generated_at": "2026-10-21T00:00:00+06:00",
         "source": "test",
         "courses": list(courses),
@@ -222,7 +223,7 @@ def _request(
     offset=0,
 ):
     return {
-        "program": program,
+        "programs": [program],
         "courses": list(courses),
         "constraints": {
             "blocked": list(blocked),
@@ -298,8 +299,11 @@ def test_fixture_requests_match_agreed_schema(catalog_payload, request_payloads,
     offered = {course["code"]: course for course in catalog_payload["courses"]}
     for name, payload in request_payloads.items():
         request = make_request(payload)
-        program = getattr(_attr(request, "program"), "value", _attr(request, "program"))
-        assert str(program).upper() in {BSCSE, BSDS}, name
+        programs = [
+            str(getattr(item, "value", item)).upper() for item in _attr(request, "programs")
+        ]
+        assert programs, name
+        assert set(programs) <= {BSCSE, BSDS}, name
         assert int(_attr(request, "limit")) >= 1, name
 
         constraints = _attr(request, "constraints")
@@ -526,6 +530,118 @@ def test_pinned_section_identity_is_preserved(make_catalog, make_request) -> Non
         assert section_keys(routine) == (("TST 1004", "B"),), (
             "pinned section B must keep its identity instead of collapsing to A"
         )
+
+
+def test_max_gap_limits_the_longest_single_gap(make_catalog, make_request) -> None:
+    catalog_payload = _catalog(
+        _course(
+            "TST 1101",
+            "Gap First",
+            3,
+            "theory",
+            [_section("A", "AR", [_meeting("Sat", "08:30", "09:50")])],
+        ),
+        _course(
+            "TST 1102",
+            "Gap Second",
+            3,
+            "theory",
+            [_section("A", "TA", [_meeting("Sat", "11:10", "12:30")])],
+        ),
+    )
+    catalog_model = make_catalog(catalog_payload)
+    courses = [{"code": "TST 1101"}, {"code": "TST 1102"}]
+
+    exact = _request(BSCSE, courses)
+    exact["constraints"]["max_gap_minutes"] = 80
+    assert routines(generate(catalog_model, make_request(exact))), (
+        "an 80-minute gap is allowed when the cap is 80"
+    )
+
+    too_tight = _request(BSCSE, courses)
+    too_tight["constraints"]["max_gap_minutes"] = 60
+    result = generate(catalog_model, make_request(too_tight))
+    assert routines(result) == []
+    assert diagnostics(result), "the gap cap should report an infeasible request"
+
+
+def test_max_campus_days_filters_multi_day_routines(make_catalog, make_request) -> None:
+    catalog_payload = _catalog(
+        _course(
+            "TST 1201",
+            "Day Footprint",
+            3,
+            "theory",
+            [
+                _section("A", "AR", [_meeting("Sat", "08:30", "09:50")]),
+                _section(
+                    "B",
+                    "TA",
+                    [
+                        _meeting("Sat", "08:30", "09:50"),
+                        _meeting("Sun", "08:30", "09:50"),
+                    ],
+                ),
+            ],
+        )
+    )
+    payload = _request(BSCSE, [{"code": "TST 1201"}])
+    payload["constraints"]["max_campus_days"] = 1
+    result = generate(make_catalog(catalog_payload), make_request(payload))
+
+    assert routines(result)
+    for routine in routines(result):
+        assert int(_attr(_attr(routine, "stats"), "campus_days")) == 1
+        assert section_keys(routine) == (("TST 1201", "A"),)
+
+
+def test_latest_end_removes_late_sections(make_catalog, make_request) -> None:
+    catalog_payload = _catalog(
+        _course(
+            "TST 1301",
+            "End Time",
+            3,
+            "theory",
+            [
+                _section("A", "AR", [_meeting("Sat", "08:30", "09:50")]),
+                _section("B", "TA", [_meeting("Sat", "15:00", "16:20")]),
+            ],
+        )
+    )
+    payload = _request(BSCSE, [{"code": "TST 1301"}])
+    payload["constraints"]["latest_end"] = "12:00"
+    result = generate(make_catalog(catalog_payload), make_request(payload))
+
+    assert routines(result)
+    for routine in routines(result):
+        assert all(end <= 12 * 60 for _day, _start, end in routine_meetings(routine))
+        assert section_keys(routine) == (("TST 1301", "A"),)
+
+
+def test_excluded_sections_are_removed_from_candidates(make_catalog, make_request) -> None:
+    meetings = [_meeting("Sat", "08:30", "09:50")]
+    catalog_payload = _catalog(
+        _course(
+            "TST 1401",
+            "Full Section",
+            3,
+            "theory",
+            [_section("A", "AR", meetings), _section("B", "AR", meetings)],
+        )
+    )
+    result = generate(
+        make_catalog(catalog_payload),
+        make_request(
+            _request(
+                BSCSE,
+                [{"code": "TST 1401", "excluded_sections": ["A"]}],
+            )
+        ),
+    )
+
+    assert routines(result)
+    for routine in routines(result):
+        assert section_keys(routine) == (("TST 1401", "B"),)
 
 
 # --------------------------------------------------------------------------- #
@@ -1030,3 +1146,175 @@ def test_generate_is_fast_on_fixture_catalog(catalog, request_payload, make_requ
 
     assert routines(result)
     assert elapsed < 3.0, f"generate took {elapsed:.2f}s on the 6-course fixture catalog"
+
+
+# --------------------------------------------------------------------------- #
+# multi-program requests
+# --------------------------------------------------------------------------- #
+def test_multiple_programs_admit_courses_from_each(make_catalog, make_request) -> None:
+    catalog_payload = _catalog(
+        _course(
+            "TST 2001",
+            "CSE Course",
+            3,
+            "theory",
+            [_section("A", "AR", [_meeting("Sat", "08:30", "09:50")])],
+            programs=(BSCSE,),
+        ),
+        _course(
+            "TST 2002",
+            "EEE Course",
+            3,
+            "theory",
+            [_section("A", "TA", [_meeting("Sun", "08:30", "09:50")])],
+            programs=(BSEEE,),
+        ),
+    )
+    payload = _request(BSCSE, [{"code": "TST 2001"}, {"code": "TST 2002"}])
+    payload["programs"] = [BSCSE, BSEEE]
+
+    result = generate(make_catalog(catalog_payload), make_request(payload))
+
+    assert routines(result)
+    for routine in routines(result):
+        assert {course_code(course) for course in courses_of(routine)} == {
+            "TST 2001",
+            "TST 2002",
+        }
+
+
+def test_program_filter_reports_every_selected_program(make_catalog, make_request) -> None:
+    catalog_payload = _catalog(
+        _course(
+            "TST 2003",
+            "EEE Only",
+            3,
+            "theory",
+            [_section("A", "AR", [_meeting("Sat", "08:30", "09:50")])],
+            programs=(BSEEE,),
+        )
+    )
+    payload = _request(BSCSE, [{"code": "TST 2003"}])
+    payload["programs"] = [BSCSE, BSDS]
+
+    result = generate(make_catalog(catalog_payload), make_request(payload))
+
+    assert routines(result) == []
+    messages = " ".join(_attr(item, "message") for item in _attr(result, "diagnostics"))
+    assert "BSCSE, BSDS" in messages, messages
+
+
+def test_empty_program_list_is_rejected() -> None:
+    from app.models.requests import GenerateRequest
+
+    payload = _request(BSCSE, [{"code": "TST 2004"}])
+    payload["programs"] = []
+
+    with pytest.raises(ValueError):
+        GenerateRequest.model_validate(payload)
+
+
+def test_duplicate_programs_are_collapsed(make_request) -> None:
+    payload = _request(BSCSE, [{"code": "CSE 1111"}])
+    payload["programs"] = [BSCSE, BSCSE, BSDS]
+
+    request = make_request(payload)
+
+    assert [str(item) for item in _attr(request, "programs")] == [BSCSE, BSDS]
+
+
+# --------------------------------------------------------------------------- #
+# gap definition: a gap must be at least one class slot
+# --------------------------------------------------------------------------- #
+def test_seam_shorter_than_a_slot_is_not_a_gap(make_catalog, make_request) -> None:
+    catalog_payload = _catalog(
+        _course(
+            "TST 3001",
+            "First Period",
+            3,
+            "theory",
+            [_section("A", "AR", [_meeting("Sat", "08:30", "09:50")])],
+        ),
+        _course(
+            "TST 3002",
+            "Next Period",
+            3,
+            "theory",
+            [_section("A", "TA", [_meeting("Sat", "09:51", "11:10")])],
+        ),
+    )
+
+    result = generate(
+        make_catalog(catalog_payload),
+        make_request(_request(BSCSE, [{"code": "TST 3001"}, {"code": "TST 3002"}])),
+    )
+
+    assert routines(result)
+    assert all(int(_attr(routine.stats, "gap_minutes")) == 0 for routine in routines(result))
+
+
+def test_idle_time_of_a_full_slot_counts_as_a_gap(make_catalog, make_request) -> None:
+    catalog_payload = _catalog(
+        _course(
+            "TST 3003",
+            "Morning Class",
+            3,
+            "theory",
+            [_section("A", "AR", [_meeting("Sat", "08:30", "09:50")])],
+        ),
+        _course(
+            "TST 3004",
+            "Afternoon Class",
+            3,
+            "theory",
+            [_section("A", "TA", [_meeting("Sat", "11:11", "12:30")])],
+        ),
+    )
+
+    result = generate(
+        make_catalog(catalog_payload),
+        make_request(_request(BSCSE, [{"code": "TST 3003"}, {"code": "TST 3004"}])),
+    )
+
+    assert routines(result)
+    # 09:50 -> 11:11 is 81 minutes: one free period plus the 1-minute seam.
+    assert all(int(_attr(routine.stats, "gap_minutes")) == 81 for routine in routines(result))
+
+
+# --------------------------------------------------------------------------- #
+# manual project slots for EEE 4902
+# --------------------------------------------------------------------------- #
+def test_eee_capstone_accepts_a_manual_meeting(make_catalog, make_request) -> None:
+    catalog_payload = _catalog(
+        _course(
+            "EEE 4902",
+            "Capstone Project II",
+            2,
+            "theory",
+            [_section("A", "AR", [])],
+            programs=(BSEEE,),
+        )
+    )
+    payload = _request(
+        BSEEE,
+        [
+            {
+                "code": "EEE 4902",
+                "manual_project": {
+                    "section": "A",
+                    "day": "Mon",
+                    "start": "10:00",
+                    "end": "12:00",
+                },
+            }
+        ],
+    )
+
+    result = generate(make_catalog(catalog_payload), make_request(payload))
+
+    assert routines(result)
+    course = courses_of(routines(result)[0])[0]
+    assert _attr(course, "manual") is True
+    assert [(item.day, item.start, item.end) for item in _attr(course, "meetings")] == [
+        ("Mon", "10:00", "12:00")
+    ]

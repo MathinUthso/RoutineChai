@@ -451,6 +451,14 @@ def _invalid_blocked_day(payload: dict) -> None:
     payload["constraints"]["blocked"] = [{"day": "Thu", "start": "08:30", "end": "09:50"}]
 
 
+def _empty_programs(payload: dict) -> None:
+    payload["programs"] = []
+
+
+def _unknown_program(payload: dict) -> None:
+    payload["programs"] = ["BSCE"]
+
+
 VALIDATION_CASES = {
     "empty_courses": _empty_courses,
     "unknown_course": _unknown_course,
@@ -459,6 +467,8 @@ VALIDATION_CASES = {
     "limit_too_large": _limit_too_large,
     "invalid_allowed_day": _invalid_allowed_day,
     "invalid_blocked_day": _invalid_blocked_day,
+    "empty_programs": _empty_programs,
+    "unknown_program": _unknown_program,
 }
 
 
@@ -472,6 +482,28 @@ def test_generate_rejects_invalid_payload(client, payloads, case: str) -> None:
     assert response.status_code == 422, f"{case}: {response.status_code} {response.text}"
     detail = response.json().get("detail")
     assert detail, f"{case}: 422 body must carry validation detail"
+
+
+# --------------------------------------------------------------------------- #
+# generate: multiple programs
+# --------------------------------------------------------------------------- #
+def test_generate_accepts_multiple_programs(client, payloads) -> None:
+    payload = _payload(payloads, "valid")
+    payload["programs"] = ["BSCSE", "BSDS"]
+
+    response = client.post("/api/generate", json=payload)
+
+    assert response.status_code == 200, response.text
+    assert response.json()["routines"], "the fixture request is feasible for both programs"
+
+
+def test_generate_dedupes_repeated_programs(client, payloads) -> None:
+    payload = _payload(payloads, "valid")
+    payload["programs"] = ["BSCSE", "BSCSE"]
+
+    response = client.post("/api/generate", json=payload)
+
+    assert response.status_code == 200, response.text
 
 
 # --------------------------------------------------------------------------- #

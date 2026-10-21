@@ -1,6 +1,6 @@
 {
   "full_bscse": {
-    "program": "BSCSE",
+    "programs": ["BSCSE"],
     "courses": [
       {"code": "CSE 1111"},
       {"code": "CSE 1112"},
@@ -17,7 +17,7 @@
     "limit": 10
   },
   "cse1111_only": {
-    "program": "BSCSE",
+    "programs": ["BSCSE"],
     "courses": [{"code": "CSE 1111"}],
     "constraints": {
       "blocked": [],
@@ -29,7 +29,7 @@
     "limit": 5
   },
   "adjacent_2213_2218": {
-    "program": "BSCSE",
+    "programs": ["BSCSE"],
     "courses": [
       {"code": "CSE 2213", "allowed_sections": ["A"]},
       {"code": "CSE 2218"}
@@ -44,7 +44,7 @@
     "limit": 5
   },
   "overlap_lab_lecture": {
-    "program": "BSCSE",
+    "programs": ["BSCSE"],
     "courses": [
       {"code": "CSE 2213", "allowed_sections": ["B"]},
       {"code": "CSE 2218"}
@@ -59,7 +59,7 @@
     "limit": 5
   },
   "overlap_lecture_lecture": {
-    "program": "BSCSE",
+    "programs": ["BSCSE"],
     "courses": [
       {"code": "CSE 2213", "allowed_sections": ["B"]},
       {"code": "CSE 2217", "allowed_sections": ["B"]}
@@ -74,7 +74,7 @@
     "limit": 5
   },
   "blocked_exact_cse1111": {
-    "program": "BSCSE",
+    "programs": ["BSCSE"],
     "courses": [{"code": "CSE 1111"}],
     "constraints": {
       "blocked": [{"day": "Sat", "start": "08:30", "end": "09:50"}],
@@ -86,7 +86,7 @@
     "limit": 5
   },
   "blocked_partial_cse1111": {
-    "program": "BSCSE",
+    "programs": ["BSCSE"],
     "courses": [{"code": "CSE 1111"}],
     "constraints": {
       "blocked": [{"day": "Sat", "start": "09:00", "end": "10:00"}],
@@ -98,7 +98,7 @@
     "limit": 5
   },
   "blocked_adjacent_cse1111": {
-    "program": "BSCSE",
+    "programs": ["BSCSE"],
     "courses": [{"code": "CSE 1111", "allowed_sections": ["A"]}],
     "constraints": {
       "blocked": [
@@ -113,7 +113,7 @@
     "limit": 5
   },
   "max_two_per_day": {
-    "program": "BSCSE",
+    "programs": ["BSCSE"],
     "courses": [
       {"code": "CSE 1111"},
       {"code": "CSE 1112"},
@@ -129,7 +129,7 @@
     "limit": 10
   },
   "max_one_per_day": {
-    "program": "BSCSE",
+    "programs": ["BSCSE"],
     "courses": [
       {"code": "CSE 1111"},
       {"code": "MATH 1151"}
@@ -144,7 +144,7 @@
     "limit": 5
   },
   "allowed_days_mon_wed": {
-    "program": "BSCSE",
+    "programs": ["BSCSE"],
     "courses": [
       {"code": "CSE 2213"},
       {"code": "CSE 2217"}
@@ -159,7 +159,7 @@
     "limit": 5
   },
   "allowed_days_mon_wed_sun": {
-    "program": "BSCSE",
+    "programs": ["BSCSE"],
     "courses": [
       {"code": "CSE 2213"},
       {"code": "CSE 2217"}
@@ -174,7 +174,7 @@
     "limit": 5
   },
   "bsds_mixed": {
-    "program": "BSDS",
+    "programs": ["BSDS"],
     "courses": [
       {"code": "CSE 1111"},
       {"code": "MATH 1151"}
@@ -189,7 +189,7 @@
     "limit": 5
   },
   "bsds_db_only": {
-    "program": "BSDS",
+    "programs": ["BSDS"],
     "courses": [{"code": "CSE 2217"}],
     "constraints": {
       "blocked": [],
@@ -201,7 +201,7 @@
     "limit": 5
   },
   "cse2217_default": {
-    "program": "BSCSE",
+    "programs": ["BSCSE"],
     "courses": [{"code": "CSE 2217"}],
     "constraints": {
       "blocked": [],
@@ -213,7 +213,7 @@
     "limit": 5
   },
   "cse2217_blocked_ab": {
-    "program": "BSCSE",
+    "programs": ["BSCSE"],
     "courses": [{"code": "CSE 2217"}],
     "constraints": {
       "blocked": [
@@ -230,7 +230,7 @@
     "limit": 5
   },
   "morning_cse1111": {
-    "program": "BSCSE",
+    "programs": ["BSCSE"],
     "courses": [{"code": "CSE 1111"}],
     "constraints": {
       "blocked": [],
@@ -242,7 +242,7 @@
     "limit": 5
   },
   "afternoon_cse1111": {
-    "program": "BSCSE",
+    "programs": ["BSCSE"],
     "courses": [{"code": "CSE 1111"}],
     "constraints": {
       "blocked": [],
