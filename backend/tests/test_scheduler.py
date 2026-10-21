@@ -219,6 +219,7 @@ def _request(
     allowed_days=None,
     time_preference="any",
     limit=10,
+    offset=0,
 ):
     return {
         "program": program,
@@ -231,6 +232,7 @@ def _request(
             "preferred_off_days": [],
         },
         "limit": limit,
+        "offset": offset,
     }
 
 
@@ -713,6 +715,43 @@ def test_no_solution_returns_diagnostics(catalog, request_payload, make_request)
     assert routines(result) == []
     assert diagnostics(result), "diagnostics must explain an empty result"
     assert isinstance(_attr(result, "truncated"), bool)
+
+
+# --------------------------------------------------------------------------- #
+# server-side paging
+# --------------------------------------------------------------------------- #
+def test_offset_returns_disjoint_ranked_pages(catalog, request_payload, make_request) -> None:
+    first = generate(catalog, make_request(request_payload("full_bscse", limit=3, offset=0)))
+    second = generate(catalog, make_request(request_payload("full_bscse", limit=3, offset=3)))
+
+    first_keys = [section_keys(routine) for routine in routines(first)]
+    second_keys = [section_keys(routine) for routine in routines(second)]
+    assert len(first_keys) == 3
+    assert len(second_keys) == 3
+    assert set(first_keys).isdisjoint(second_keys)
+    assert _attr(first, "total") == _attr(second, "total")
+    assert _attr(first, "offset") == 0
+    assert _attr(second, "offset") == 3
+    assert _attr(first, "limit") == 3
+    assert scores(first) == sorted(scores(first), reverse=True)
+    assert scores(second) == sorted(scores(second), reverse=True)
+    assert scores(first)[-1] >= scores(second)[0], "pages must preserve the global ranking"
+
+
+def test_offset_past_the_end_returns_an_empty_page(catalog, request_payload, make_request) -> None:
+    all_routines = generate(catalog, make_request(request_payload("full_bscse", limit=50)))
+    total = _attr(all_routines, "total")
+
+    result = generate(
+        catalog,
+        make_request(request_payload("full_bscse", limit=3, offset=total)),
+    )
+
+    assert routines(result) == []
+    assert _attr(result, "total") == total
+    assert _attr(result, "offset") == total
+    assert _attr(result, "truncated") is False
+    assert diagnostics(result), "an empty page should explain itself"
 
 
 # --------------------------------------------------------------------------- #

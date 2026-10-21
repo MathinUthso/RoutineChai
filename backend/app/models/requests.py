@@ -43,6 +43,7 @@ class GenerateRequest(BaseModel):
     courses: list[SelectedCourse] = Field(min_length=1)
     constraints: Constraints = Field(default_factory=Constraints)
     limit: int = Field(default=10, ge=1, le=50)
+    offset: int = Field(default=0, ge=0, le=100_000)
 
 
 class RoutineCourse(BaseModel):
@@ -90,3 +91,7 @@ class GenerateResult(BaseModel):
     routines: list[Routine]
     diagnostics: list[Diagnostics]
     truncated: bool
+    total: int
+    total_is_partial: bool = False
+    offset: int
+    limit: int

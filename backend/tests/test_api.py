@@ -323,10 +323,14 @@ def test_generate_valid_request_returns_ranked_routines(client, payloads, catalo
 
     assert response.status_code == 200, response.text
     body = response.json()
-    assert "routines" in body
+    assert {"routines", "diagnostics", "truncated", "total", "offset", "limit"} <= set(body)
     routines = body["routines"]
     assert routines, "the fixture request is feasible"
     assert len(routines) <= payload["limit"]
+    assert body["offset"] == payload.get("offset", 0)
+    assert body["limit"] == payload["limit"]
+    assert body["total"] >= len(routines)
+    assert isinstance(body["total_is_partial"], bool)
 
     requested = {item["code"] for item in payload["courses"]}
     allowed_sections = {

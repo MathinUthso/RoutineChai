@@ -87,6 +87,8 @@ def request_payload(request_payloads: dict):
         for key, value in overrides.items():
             if key == "limit":
                 payload["limit"] = value
+            elif key == "offset":
+                payload["offset"] = value
             elif key == "constraints":
                 payload["constraints"].update(value)
             else:

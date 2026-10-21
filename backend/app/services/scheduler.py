@@ -109,6 +109,9 @@ def generate(catalog: Catalog, request: GenerateRequest) -> GenerateResult:
                 )
             ],
             truncated=False,
+            total=0,
+            offset=request.offset,
+            limit=request.limit,
         )
 
     blocked = _blocked_masks(request.constraints)
@@ -132,6 +135,9 @@ def generate(catalog: Catalog, request: GenerateRequest) -> GenerateResult:
                 ),
             ],
             truncated=False,
+            total=0,
+            offset=request.offset,
+            limit=request.limit,
         )
 
     faculty_prefs: dict[str, set[str]] = {}
@@ -143,21 +149,43 @@ def generate(catalog: Catalog, request: GenerateRequest) -> GenerateResult:
         if preferred:
             faculty_prefs[course.code.strip()] = preferred
 
-    solutions, truncated = _search(
+    solutions, total, capped = _search(
         candidates, codes, request, faculty_prefs, time.monotonic() + TIME_LIMIT_SECONDS
     )
+    truncated = capped or total > request.offset + len(solutions)
     if not solutions:
+        diagnostics = (
+            [
+                Diagnostics(
+                    reason="no_solution",
+                    courses_without_candidates=[],
+                    conflicting_pairs=[],
+                    message="No routines exist at this page offset.",
+                )
+            ]
+            if total
+            else [_diagnostics(codes, candidates, request.constraints, capped)]
+        )
         return GenerateResult(
             routines=[],
-            diagnostics=[
-                *excluded_diagnostics,
-                _diagnostics(codes, candidates, request.constraints, truncated),
-            ],
+            diagnostics=[*excluded_diagnostics, *diagnostics],
             truncated=truncated,
+            total=total,
+            total_is_partial=capped,
+            offset=request.offset,
+            limit=request.limit,
         )
 
     routines = [_routine(solution, request, faculty_prefs) for solution in solutions]
-    return GenerateResult(routines=routines, diagnostics=excluded_diagnostics, truncated=truncated)
+    return GenerateResult(
+        routines=routines,
+        diagnostics=excluded_diagnostics,
+        truncated=truncated,
+        total=total,
+        total_is_partial=capped,
+        offset=request.offset,
+        limit=request.limit,
+    )
 
 
 def _minutes(value: str) -> int:
@@ -315,8 +343,8 @@ def _search(
     request: GenerateRequest,
     faculty_prefs: dict[str, set[str]],
     deadline: float,
-) -> tuple[list[tuple[_Candidate, ...]], bool]:
-    limit = request.limit
+) -> tuple[list[tuple[_Candidate, ...]], int, bool]:
+    keep = request.offset + request.limit
     max_sessions = request.constraints.max_sessions_per_day
     best: list[tuple[float, tuple[tuple[str, str], ...], tuple[_Candidate, ...]]] = []
     seen: set[tuple[tuple[str, str], ...]] = set()
@@ -345,9 +373,9 @@ def _search(
             total += 1
             metrics = _metrics(solution, request.constraints, faculty_prefs)
             best.append((metrics.score, key, solution))
-            if len(best) > max(4 * limit, 32):
+            if len(best) > max(4 * keep, 32):
                 best.sort(key=lambda entry: (-entry[0], entry[1]))
-                del best[limit:]
+                del best[keep:]
             return
 
         feasible: list[tuple[int, str, int, list[_Candidate]]] = []
@@ -375,7 +403,8 @@ def _search(
 
     visit(tuple(range(len(candidates))))
     best.sort(key=lambda entry: (-entry[0], entry[1]))
-    return [solution for _, _, solution in best[:limit]], capped or total > limit
+    page = best[request.offset : request.offset + request.limit]
+    return [solution for _, _, solution in page], total, capped
 
 
 def _metrics(
