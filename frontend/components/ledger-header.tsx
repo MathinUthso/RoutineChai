@@ -1,13 +1,17 @@
 "use client";
 
 import { motion, useReducedMotion } from "framer-motion";
+import { ImpactVignette } from "./impact-vignette";
+import { MurgiIcon } from "./icons";
 
 const tickerItems = [
   "Fall 2026",
-  "Sat–Wed teaching week",
-  "08:30–16:30",
-  "Asia/Dhaka",
-  "Registrar export",
+  "Sat–Wed classes",
+  "Clash-free routines only",
+  "Room TBA builds character",
+  "Thu–Fri recovery arc",
+  "Bring a charger",
+  "Sleep is a valid elective",
 ];
 
 function TickerCopy() {
@@ -47,80 +51,87 @@ export function LedgerHeader() {
             >
               UIU
             </motion.span>
-            <p className="mono-label leading-none text-ink-soft">Office of the Registrar</p>
+            <p className="mono-label leading-none text-ink-soft">Fall 2026 routine planner</p>
           </div>
 
-          <div className="flex items-center gap-2.5 font-mono text-[10px] uppercase tracking-[0.13em] text-ink-faint">
-            <span className="hidden tabular sm:inline">Sheet R-01</span>
-            <span aria-hidden className="hidden h-3 w-px bg-rule sm:inline-block" />
-            <span className="flex items-center gap-1.5 text-coral-ink">
-              <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-coral" />
-              Draft
-            </span>
+          <div className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.13em] text-ink-faint">
+            <MurgiIcon className="h-4 w-4 text-green" />
+            <span>Built by Murgi</span>
           </div>
         </motion.div>
 
-        <div className="grid gap-5 py-8 sm:py-10 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end lg:gap-16 lg:py-12">
-          <motion.h1
-            aria-label="Fall 2026 routine generator"
-            initial={reduceMotion ? false : "hidden"}
-            animate="show"
-            variants={{
-              hidden: {},
-              show: { transition: { staggerChildren: 0.12, delayChildren: 0.08 } },
-            }}
-            className="text-[clamp(3.4rem,13.5vw,8.75rem)] font-medium leading-[0.78] tracking-[-0.065em] text-ink"
-          >
-            <span aria-hidden className="flex flex-wrap items-baseline gap-x-[0.14em]">
-              <motion.span
-                variants={{
-                  hidden: { clipPath: "inset(0 0 100% 0)", y: "0.16em", opacity: 0 },
-                  show: {
-                    clipPath: "inset(0 0 0% 0)",
-                    y: "0em",
-                    opacity: 1,
-                    transition: { duration: 0.7, ease: "easeOut" },
-                  },
-                }}
-                className="inline-block"
-              >
-                Fall
-              </motion.span>
-              <motion.span
-                variants={{
-                  hidden: { clipPath: "inset(0 0 100% 0)", y: "0.16em", opacity: 0 },
-                  show: {
-                    clipPath: "inset(0 0 0% 0)",
-                    y: "0em",
-                    opacity: 1,
-                    transition: { duration: 0.7, ease: "easeOut" },
-                  },
-                }}
-                className="inline-block text-green"
-              >
-                2026
-              </motion.span>
-            </span>
-          </motion.h1>
+        <div className="relative pb-8 pt-8 sm:pt-10 lg:min-h-[clamp(340px,30vw,410px)] lg:pb-0 lg:pt-12">
+          <div className="relative z-10 min-w-0">
+            <motion.h1
+              aria-label="Fall 2026 routine generator"
+              initial={reduceMotion ? false : "hidden"}
+              animate="show"
+              variants={{
+                hidden: {},
+                show: { transition: { staggerChildren: 0.12, delayChildren: 0.08 } },
+              }}
+              className="text-[clamp(3.4rem,12vw,8.75rem)] font-medium leading-[0.78] tracking-[-0.065em] text-ink"
+            >
+              <span aria-hidden className="flex flex-wrap items-baseline gap-x-[0.14em]">
+                <motion.span
+                  variants={{
+                    hidden: { clipPath: "inset(0 0 100% 0)", y: "0.16em", opacity: 0 },
+                    show: {
+                      clipPath: "inset(0 0 0% 0)",
+                      y: "0em",
+                      opacity: 1,
+                      transition: { duration: 0.7, ease: "easeOut" },
+                    },
+                  }}
+                  className="inline-block"
+                >
+                  Fall
+                </motion.span>
+                <motion.span
+                  variants={{
+                    hidden: { clipPath: "inset(0 0 100% 0)", y: "0.16em", opacity: 0 },
+                    show: {
+                      clipPath: "inset(0 0 0% 0)",
+                      y: "0em",
+                      opacity: 1,
+                      transition: { duration: 0.7, ease: "easeOut" },
+                    },
+                  }}
+                  className="inline-block text-green"
+                >
+                  2026
+                </motion.span>
+              </span>
+            </motion.h1>
+
+            <motion.div
+              initial={reduceMotion ? false : { opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, delay: 0.4, ease: "easeOut" }}
+              className="mt-4 max-w-[32ch]"
+            >
+              <p className="mono-label text-ink-faint">Routine planner</p>
+              <p className="mt-1.5 text-[0.95rem] leading-snug text-ink-soft">
+                Build a clash-free term.
+              </p>
+            </motion.div>
+          </div>
 
           <motion.div
-            initial={reduceMotion ? false : { opacity: 0, x: 14 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.5, delay: 0.35, ease: "easeOut" }}
-            className="max-w-[24ch] lg:pb-1 lg:text-right"
+            initial={reduceMotion ? false : { opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.35, delay: 0.18, ease: "easeOut" }}
+            className="relative z-0 mt-7 -mb-8 flex justify-end lg:absolute lg:bottom-0 lg:right-0 lg:mt-0 lg:mb-0"
           >
-            <p className="mono-label text-ink-faint">Course registration</p>
-            <p className="mt-1.5 text-[0.95rem] leading-snug text-ink-soft">
-              Build a clash-free term.
-            </p>
+            <ImpactVignette />
           </motion.div>
         </div>
       </div>
 
       <div className="relative overflow-hidden border-y border-green-deep bg-green-deep text-paper">
         <p className="sr-only">
-          Fall 2026. Saturday through Wednesday teaching week. 08:30 to 16:30. Asia/Dhaka.
-          Registrar export.
+          Fall 2026. Classes run Saturday through Wednesday, 8:30 AM to 4:30 PM, Asia/Dhaka. Build
+          clash-free weekly routines around your blocked hours. Built by Murgi.
         </p>
         <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-10 bg-gradient-to-r from-green-deep to-transparent" />
         <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-10 bg-gradient-to-l from-green-deep to-transparent" />
@@ -128,7 +139,7 @@ export function LedgerHeader() {
         <motion.div
           aria-hidden
           animate={reduceMotion ? undefined : { x: ["0%", "-50%"] }}
-          transition={{ duration: 26, ease: "linear", repeat: Infinity }}
+          transition={{ duration: 40, ease: "linear", repeat: Infinity }}
           className="flex w-max py-2.5 will-change-transform"
         >
           <TickerCopy />

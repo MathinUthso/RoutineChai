@@ -82,12 +82,34 @@ export function AlertIcon({ className }: IconProps) {
   );
 }
 
+export function ReplayIcon({ className }: IconProps) {
+  return (
+    <svg {...base} className={className}>
+      <path d="M3.25 5.25v3h3" />
+      <path d="M4.1 8.05a4.35 4.35 0 1 0 .55-3.35" />
+    </svg>
+  );
+}
+
 export function CalendarIcon({ className }: IconProps) {
   return (
     <svg {...base} className={className}>
       <rect x="2.25" y="3.25" width="11.5" height="10.5" rx="0.5" />
       <path d="M2.25 6.25h11.5M5.25 2v2.5M10.75 2v2.5" />
       <path d="M5 8.75h1M7.5 8.75h1M10 8.75h1M5 11h1M7.5 11h1" />
+    </svg>
+  );
+}
+
+/** Murgi, the bird behind the planner. */
+export function MurgiIcon({ className }: IconProps) {
+  return (
+    <svg {...base} className={className} strokeWidth={1.2}>
+      <path d="M7.4 4.2c-.4-.8-.1-1.7.7-2.1.1.6.5 1 1.1 1.2.3-.7 1-1.1 1.7-1-.1.6.1 1.2.5 1.5" />
+      <path d="M10.2 3.9c1.4 0 2.5 1.1 2.5 2.5v1.5c0 2.2-1.8 4-4 4H8.1c-1.9 0-3.5-1.6-3.5-3.5V7.6c0-1 .8-1.8 1.8-1.8h1" />
+      <path d="M12.7 6.5l2.1 1-2.1 1.1" />
+      <circle cx="10.2" cy="6.1" r="0.55" fill="currentColor" stroke="none" />
+      <path d="M10.2 9.1c.6.5.8 1.4.4 2.1" />
     </svg>
   );
 }
