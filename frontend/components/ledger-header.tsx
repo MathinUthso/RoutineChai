@@ -6,11 +6,11 @@ import { ImpactVignette } from "./impact-vignette";
 import { MurgiIcon } from "./icons";
 
 const tickerItems = [
-  "routineChai",
+  "RoutineChai",
   "Fall 2026",
   "Sat–Wed classes",
   "Clash-free routines only",
-  "Room TBA builds character",
+  "TBA builds character",
   "Thu–Fri recovery arc",
   "Bring a charger",
   "Sleep is a valid elective",

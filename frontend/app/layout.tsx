@@ -17,7 +17,7 @@ const mono = IBM_Plex_Mono({
 
 export const metadata: Metadata = {
   title: "Select courses you won't attend",
-  applicationName: "routineChai",
+  applicationName: "RoutineChai",
   description:
     "Pick your Fall 2026 courses and build your weeekly routine around the hours you cannot attend.",
 };
