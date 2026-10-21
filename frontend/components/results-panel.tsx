@@ -445,8 +445,11 @@ export function ResultsPanel({
             title="Every plan is one complete section combination. Plan A scores highest; the rest are backups."
             className="mt-1.5 text-title font-medium tracking-[-0.015em]"
           >
-            Plans &amp; backups
+            Timetable
           </h2>
+          <p className="mt-1.5 max-w-[54ch] text-[0.875rem] leading-relaxed text-ink-soft">
+            Each plan is a full set of sections. Plan A scores highest; the rest are your backups.
+          </p>
         </div>
         <dl
           className="flex flex-wrap items-center gap-x-5 gap-y-1"
