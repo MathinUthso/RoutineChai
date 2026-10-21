@@ -273,7 +273,8 @@ Render restarts the API when `ALLOWED_ORIGINS` changes.
 
 ### Frontend on Vercel
 
-The UI is the Vercel project `routine-chai`, connected to this repository with:
+The UI is the Vercel project `routine-chai`, deployed with the Vercel CLI. The project has no GitHub
+integration, so pushing to `main` does **not** redeploy it.
 
 | Setting | Value |
 | --- | --- |
@@ -285,6 +286,22 @@ The UI is the Vercel project `routine-chai`, connected to this repository with:
 Set the environment variable `NEXT_PUBLIC_API_BASE_URL` to the Render URL,
 `https://routinechai.onrender.com`, with no trailing slash. The value is inlined at build time, so
 redeploy the project after changing it.
+
+Deploy from the **repository root**, not from `frontend/`. The Root Directory is `frontend`, so a
+deploy started inside `frontend/` resolves the build root to `frontend/frontend` and fails with
+`The specified Root Directory "frontend" does not exist`. The CLI link file lives in
+`frontend/.vercel`; copy it to the root first:
+
+```powershell
+# from the repository root
+Copy-Item frontend\.vercel\project.json .vercel\project.json
+$env:VERCEL_OIDC_TOKEN = (Get-Content frontend\.env.local | Select-String 'VERCEL_OIDC_TOKEN="([^"]+)"').Matches[0].Groups[1].Value
+npx vercel --prod --yes
+```
+
+The `VERCEL_OIDC_TOKEN` in `frontend/.env.local` expires after 12 hours. Check it with
+`npx vercel whoami`, and refresh it by rerunning `npx vercel link` from `frontend/`, which rewrites
+the token in place.
 
 ### Verifying a deployment
 
