@@ -82,7 +82,7 @@ export function SectionBoard({
 }: SectionBoardProps) {
   const [marking, setMarking] = useState(false);
   const [onlyReady, setOnlyReady] = useState(false);
-  const [showLegend, setShowLegend] = useState(false);
+  const [showLegend, setShowLegend] = useState(true);
   const slotMinutes = catalogSlotMinutes(catalog);
   const busy = pending !== null;
 
@@ -152,8 +152,8 @@ export function SectionBoard({
         {pending
           ? `Checking ${pending.code} ${pending.section}…`
           : marking
-            ? "Pick any section to mark it full"
-            : "Pick a ready section to swap"}
+            ? "Pick a section to mark it full"
+            : "Pick a section to swap in"}
       </p>
 
       {error && (
@@ -200,10 +200,17 @@ export function SectionBoard({
                   </span>
                 </p>
                 <div className="flex items-center gap-2">
-                  <span className="mono-label tabular text-ink-faint">
+                  <span
+                    className="mono-label tabular text-ink-faint"
+                    title={
+                      routineCourse.manual
+                        ? undefined
+                        : "Sections you can swap to without breaking the rest of the plan."
+                    }
+                  >
                     {routineCourse.manual
                       ? "Manual slot"
-                      : `${readyCount} ${readyCount === 1 ? "swap" : "swaps"}`}
+                      : `${readyCount} ready`}
                   </span>
                   {!routineCourse.manual && (
                     <>

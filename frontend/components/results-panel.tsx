@@ -54,12 +54,32 @@ type ResultsPanelProps = {
   onPageChange: (page: number) => void;
 };
 
-const BREAKDOWN_LABELS: { key: keyof ScoreBreakdown; label: string }[] = [
-  { key: "time", label: "Time of day" },
-  { key: "faculty", label: "Faculty fit" },
-  { key: "compactness", label: "Compactness" },
-  { key: "fewer_days", label: "Fewer days" },
-  { key: "off_days", label: "Off days" },
+const BREAKDOWN_LABELS: { key: keyof ScoreBreakdown; label: string; help: string }[] = [
+  {
+    key: "time",
+    label: "Time of day",
+    help: "How well the class hours fit the time of day you prefer.",
+  },
+  {
+    key: "faculty",
+    label: "Faculty fit",
+    help: "How well the chosen sections match the faculty you prefer or avoid.",
+  },
+  {
+    key: "compactness",
+    label: "Compactness",
+    help: "How little idle time the plan leaves between your classes.",
+  },
+  {
+    key: "fewer_days",
+    label: "Fewer days",
+    help: "How few days you have to come to campus for this plan.",
+  },
+  {
+    key: "off_days",
+    label: "Off days",
+    help: "How well the plan keeps the days off you asked for free.",
+  },
 ];
 
 function scoreTone(score: number) {
@@ -184,7 +204,7 @@ function EmptyResult({
               onClick={onResetLive}
               className="press inline-flex min-h-11 items-center gap-2 bg-green px-4 text-[0.9375rem] text-paper hover:bg-green-deep"
             >
-              Reset live constraints
+              Reset Live Constraints
               <ArrowRightIcon className="h-4 w-4" />
             </button>
           ) : null}
@@ -194,7 +214,7 @@ function EmptyResult({
             className="press inline-flex min-h-11 items-center gap-2 border border-rule-strong px-4 text-[0.9375rem] text-ink hover:border-ink"
           >
             <ArrowLeftIcon className="h-4 w-4" />
-            Adjust constraints
+            Adjust Constraints
           </button>
         </div>
       </div>
@@ -207,10 +227,10 @@ function Breakdown({ routine }: { routine: Routine }) {
 
   return (
     <dl className="mt-4 grid gap-x-6 gap-y-3 sm:grid-cols-2">
-      {BREAKDOWN_LABELS.map(({ key, label }, index) => {
+      {BREAKDOWN_LABELS.map(({ key, label, help }, index) => {
         const value = Math.max(0, Math.min(100, routine.breakdown[key]));
         return (
-          <div key={key}>
+          <div key={key} title={help}>
             <div className="flex items-baseline justify-between gap-3">
               <dt className="mono-label text-ink-faint">{label}</dt>
               <dd className="font-mono text-[0.75rem] tabular text-ink-soft">
@@ -264,12 +284,15 @@ function RoutineDetail({ routine, planName }: { routine: Routine; planName: stri
             Your timetable
           </h3>
           <p className="mono-label mt-1 text-ink-faint">
-            {routine.courses.length} courses · {routine.stats.campus_days} campus{" "}
-            {routine.stats.campus_days === 1 ? "day" : "days"}
+            {routine.courses.length === 1 ? "1 course" : `${routine.courses.length} courses`} ·{" "}
+            {routine.stats.campus_days} {routine.stats.campus_days === 1 ? "day" : "days"} on
+            campus
           </p>
         </div>
         <div className="flex flex-col items-end gap-2 text-right">
-          <div>
+          <div
+            title="Fit score out of 100. Higher means this plan matches your preferences better than the others."
+          >
             <p className="mono-label text-ink-faint">Score</p>
             <p className={`font-mono text-[2rem] leading-none tabular ${scoreTone(routine.score)}`}>
               {routine.score.toFixed(1)}
@@ -420,7 +443,7 @@ export function ResultsPanel({
             ref={headingRef}
             tabIndex={-1}
             title="Every plan is one complete section combination. Plan A scores highest; the rest are backups."
-            className="mt-1.5 text-title font-medium tracking-[-0.015em] focus:outline-none"
+            className="mt-1.5 text-title font-medium tracking-[-0.015em]"
           >
             Plans &amp; backups
           </h2>
@@ -431,7 +454,7 @@ export function ResultsPanel({
           aria-label="Result summary"
         >
           <div className="flex items-baseline gap-1.5">
-            <dt className="mono-label text-ink-faint">Combinations</dt>
+            <dt className="mono-label text-ink-faint">Plans found</dt>
             <dd className="font-mono text-[0.75rem] tabular text-ink">{totalLabel}</dd>
           </div>
           <div className="flex items-baseline gap-1.5">
@@ -441,7 +464,7 @@ export function ResultsPanel({
             </dd>
           </div>
           <div className="flex items-baseline gap-1.5">
-            <dt className="mono-label text-ink-faint">Open</dt>
+            <dt className="mono-label text-ink-faint">Showing</dt>
             <dd className="font-mono text-[0.75rem] tabular text-ink">{planName}</dd>
           </div>
         </dl>
@@ -459,7 +482,7 @@ export function ResultsPanel({
           </div>
           <div className="h-[26rem] animate-pulse border border-rule bg-paper-raised" />
           <div className="hidden h-[26rem] animate-pulse border border-rule bg-paper-raised xl:block" />
-          <p className="sr-only">Generating ranked timetables.</p>
+          <p className="sr-only">Generating ranked timetables…</p>
         </div>
       )}
 

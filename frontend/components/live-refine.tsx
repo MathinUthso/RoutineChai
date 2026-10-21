@@ -159,12 +159,22 @@ export function LiveRefine({ constraints, busy, error, onChange }: LiveRefinePro
         <h3
           id="live-refine-title"
           className="mono-label text-ink"
-          title="Slide a rule and the plans re-rank. The last good list stays visible while the solver works."
+          title="Move a constraint and the plans re-rank. The last good list stays visible while the solver works."
         >
           Live constraints
         </h3>
-        <span className="mono-label tabular text-ink-faint" aria-live="polite">
-          {busy ? "Re-ranking…" : activeCount > 0 ? `${activeCount} active` : "Open"}
+        <span
+          className="mono-label tabular text-ink-faint"
+          aria-live="polite"
+          title="Live constraints currently narrowing your plans."
+        >
+          {busy ? "Re-ranking…" : activeCount === 0 ? "None" : activeCount}
+          {busy || activeCount === 0 ? null : (
+            <span className="sr-only">
+              {" "}
+              {activeCount} live {activeCount === 1 ? "constraint" : "constraints"} set
+            </span>
+          )}
         </span>
       </div>
 
@@ -245,8 +255,8 @@ export function LiveRefine({ constraints, busy, error, onChange }: LiveRefinePro
         />
       </div>
 
-      <div className="flex items-center justify-between gap-3 border-t border-rule px-4 py-2.5">
-        <span className="mono-label text-ink-faint">Re-ranks live</span>
+      <div className="border-t border-rule px-4 py-2.5">
+        <p className="mono-label text-ink-faint">Plans re-rank as you move these</p>
         <button
           type="button"
           disabled={activeCount === 0 || busy}
@@ -260,9 +270,9 @@ export function LiveRefine({ constraints, busy, error, onChange }: LiveRefinePro
               max_sessions_per_day: 3,
             })
           }
-          className="mono-label inline-flex min-h-9 items-center border border-rule-strong px-2.5 text-ink transition-colors hover:border-ink hover:bg-paper disabled:cursor-not-allowed disabled:border-rule disabled:text-ink-faint"
+          className="press mono-label mt-2 inline-flex min-h-9 w-full items-center justify-center border border-rule-strong px-2.5 text-ink transition-colors hover:border-ink hover:bg-paper disabled:cursor-not-allowed disabled:border-rule disabled:text-ink-faint"
         >
-          Clear rules
+          Reset Constraints
         </button>
       </div>
 
