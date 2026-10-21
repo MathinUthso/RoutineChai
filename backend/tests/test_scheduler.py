@@ -8,7 +8,8 @@ Schema under test (see ``tests/fixtures/*.json``):
                                 preferred_faculty?,excluded_faculty?}] /
            constraints{blocked,max_sessions_per_day,allowed_days,
                        time_preference,preferred_off_days,
-                       max_gap_minutes?,max_campus_days?,latest_end?} / limit
+                       max_gap_minutes?,max_campus_days?,
+                       earliest_start?,latest_end?} / limit
 
 Every expected value below is derived from the fixture catalog or from the
 scheduler contract, never from the implementation.
@@ -618,6 +619,29 @@ def test_latest_end_removes_late_sections(make_catalog, make_request) -> None:
     for routine in routines(result):
         assert all(end <= 12 * 60 for _day, _start, end in routine_meetings(routine))
         assert section_keys(routine) == (("TST 1301", "A"),)
+
+
+def test_earliest_start_removes_early_sections(make_catalog, make_request) -> None:
+    catalog_payload = _catalog(
+        _course(
+            "TST 1302",
+            "Start Time",
+            3,
+            "theory",
+            [
+                _section("A", "AR", [_meeting("Sat", "08:30", "09:50")]),
+                _section("B", "TA", [_meeting("Sat", "11:00", "12:20")]),
+            ],
+        )
+    )
+    payload = _request(BSCSE, [{"code": "TST 1302"}])
+    payload["constraints"]["earliest_start"] = "10:00"
+    result = generate(make_catalog(catalog_payload), make_request(payload))
+
+    assert routines(result)
+    for routine in routines(result):
+        assert all(start >= 10 * 60 for _day, start, _end in routine_meetings(routine))
+        assert section_keys(routine) == (("TST 1302", "B"),)
 
 
 def test_excluded_sections_are_removed_from_candidates(make_catalog, make_request) -> None:

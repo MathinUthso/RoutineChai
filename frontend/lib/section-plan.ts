@@ -127,6 +127,7 @@ export function sectionOptions({
   const others = routine.courses.filter((item) => item.code !== course.code);
   const otherMeetings = others.flatMap((item) => item.meetings);
   const allowedDays = new Set(constraints.allowed_days);
+  const earliestStart = constraints.earliest_start ? minutesOfDay(constraints.earliest_start) : null;
   const latestEnd = constraints.latest_end ? minutesOfDay(constraints.latest_end) : null;
 
   return [...course.sections]
@@ -162,7 +163,15 @@ export function sectionOptions({
             reason: `Meets ${DAY_LABELS[meeting.day] ?? meeting.day}, outside your teaching days`,
           };
         }
+        const start = minutesOfDay(meeting.start);
         const end = minutesOfDay(meeting.end);
+        if (earliestStart !== null && start !== null && start < earliestStart) {
+          return {
+            section,
+            status: "filtered" as const,
+            reason: `Starts before ${formatTime(constraints.earliest_start ?? "")}`,
+          };
+        }
         if (latestEnd !== null && end !== null && end > latestEnd) {
           return {
             section,

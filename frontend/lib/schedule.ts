@@ -61,6 +61,7 @@ export function defaultConstraints(): Constraints {
     preferred_off_days: [],
     max_gap_minutes: null,
     max_campus_days: null,
+    earliest_start: null,
     latest_end: null,
   };
 }
@@ -256,6 +257,9 @@ export function describeConstraints(constraints: Constraints): {
   }
   if (constraints.max_campus_days !== null) {
     live.push(`${constraints.max_campus_days} days`);
+  }
+  if (constraints.earliest_start !== null) {
+    live.push(`From ${formatTime(constraints.earliest_start)}`);
   }
   if (constraints.latest_end !== null) {
     live.push(`Ends by ${formatTime(constraints.latest_end)}`);

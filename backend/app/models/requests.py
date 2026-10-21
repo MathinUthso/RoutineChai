@@ -55,6 +55,7 @@ class Constraints(BaseModel):
     # Live refinements shown on the timetable tab. None means "no cap".
     max_gap_minutes: int | None = Field(default=None, ge=0, le=24 * 60)
     max_campus_days: int | None = Field(default=None, ge=1, le=5)
+    earliest_start: str | None = Field(default=None, pattern=TIME_PATTERN)
     latest_end: str | None = Field(default=None, pattern=TIME_PATTERN)
 
 

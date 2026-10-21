@@ -90,7 +90,7 @@ The UI is a three-step flow: **Courses → Constraints → Timetable**. Programs
 The timetable step is built for fast section picking:
 
 - **Three rails** — live constraints and the plan list on the left, the plan and its weekly grid in the middle, the section board on the right. Explanations live in tooltips and metadata rows instead of paragraphs.
-- **Live constraints** — four sliders (longest single gap, latest end time, campus days, classes per day) re-rank the plans on the server as they move; the previous list stays on screen while the solver works.
+- **Live constraints** — five sliders (earliest start, latest end, longest single gap, campus days, classes per day) re-rank the plans on the server as they move; the previous list stays on screen while the solver works.
 - **Plans and backups** — every ranked routine is one complete section combination, labelled `Plan A`, `Plan B`, `Plan C`, and so on. The rest of the list is the backup ladder, and paging walks the remaining combinations.
 - **Section board** — for the open plan, every catalog section of every course is listed as *current*, *ready to swap*, *conditional*, *conflict*, or *marked full*. Swapping one section re-scores the plan server-side; marking a section full removes it from the solver and re-ranks the remaining combinations, which is how a student falls back from Plan A to Plan B when the registrar fills a section.
 
@@ -171,6 +171,7 @@ Always verify the generated schedule against the official registrar notice befor
     "preferred_off_days": ["Mon"],
     "max_gap_minutes": 90,
     "max_campus_days": 4,
+    "earliest_start": "09:00",
     "latest_end": "15:00"
   },
   "limit": 10,
@@ -195,11 +196,11 @@ A feasible request returns HTTP 200 with ranked `routines`, `total`, `offset`, `
 - Conditional (`if_required`) sections are excluded unless explicitly allowed.
 - Sections taught by `excluded_faculty` are removed, even when pinned.
 - Sections named in `excluded_sections` are removed, even when pinned.
-- No meeting may end after `latest_end`.
+- No meeting may start before `earliest_start` or end after `latest_end`.
 - A plan may not contain a single idle gap longer than `max_gap_minutes`, and may not span more than `max_campus_days` teaching days.
 - Manual project meetings replace the catalog sections and still obey clash, day, session-cap, and faculty-exclusion rules.
 
-`max_gap_minutes`, `max_campus_days`, and `latest_end` are optional; omitting them means no cap. The timetable step drives them from the live sliders, and `excluded_sections` from the section board's *mark full* action.
+`max_gap_minutes`, `max_campus_days`, `earliest_start`, and `latest_end` are optional; omitting them means no cap. The timetable step drives them from the live sliders, and `excluded_sections` from the section board's *mark full* action.
 
 ### Soft constraints
 

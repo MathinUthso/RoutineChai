@@ -445,6 +445,17 @@ def test_generate_removes_meetings_after_latest_end(client, payloads) -> None:
     assert body["diagnostics"], "the late section should be reported"
 
 
+def test_generate_removes_meetings_before_earliest_start(client, payloads) -> None:
+    payload = _payload(payloads, "valid")
+    payload["constraints"]["earliest_start"] = "13:00"
+    response = client.post("/api/generate", json=payload)
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["routines"] == [], "every fixture course meets before 13:00"
+    assert body["diagnostics"], "the early section should be reported"
+
+
 def test_generate_keeps_only_routines_inside_the_campus_day_cap(client, payloads) -> None:
     payload = _payload(payloads, "valid")
     payload["constraints"]["max_campus_days"] = 1
@@ -495,6 +506,10 @@ def _invalid_latest_end(payload: dict) -> None:
     payload["constraints"]["latest_end"] = "25:00"
 
 
+def _invalid_earliest_start(payload: dict) -> None:
+    payload["constraints"]["earliest_start"] = "8:60"
+
+
 def _negative_max_gap(payload: dict) -> None:
     payload["constraints"]["max_gap_minutes"] = -1
 
@@ -514,6 +529,7 @@ VALIDATION_CASES = {
     "empty_programs": _empty_programs,
     "unknown_program": _unknown_program,
     "invalid_latest_end": _invalid_latest_end,
+    "invalid_earliest_start": _invalid_earliest_start,
     "negative_max_gap": _negative_max_gap,
 }
 

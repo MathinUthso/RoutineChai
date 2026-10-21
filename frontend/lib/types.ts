@@ -67,6 +67,8 @@ export interface Constraints {
   max_gap_minutes: number | null;
   /** Distinct teaching days allowed; null means no cap. */
   max_campus_days: number | null;
+  /** No meeting may start before this 24h clock time; null means no cap. */
+  earliest_start: string | null;
   /** No meeting may end after this 24h clock time; null means no cap. */
   latest_end: string | null;
 }

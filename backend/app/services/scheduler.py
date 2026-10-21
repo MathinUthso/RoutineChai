@@ -228,6 +228,12 @@ def _slot_minutes(catalog: Catalog) -> int:
     return min(durations) if durations else 0
 
 
+def _earliest_start_minutes(constraints: Constraints) -> int | None:
+    if constraints.earliest_start is None:
+        return None
+    return _minutes(constraints.earliest_start)
+
+
 def _latest_end_minutes(constraints: Constraints) -> int | None:
     if constraints.latest_end is None:
         return None
@@ -252,6 +258,7 @@ def _candidate(
     allowed_days: set[str],
     blocked: dict[str, int],
     max_sessions: int,
+    earliest_start: int | None = None,
     latest_end: int | None = None,
     manual: bool = False,
 ) -> _Candidate | None:
@@ -264,6 +271,8 @@ def _candidate(
         start = _minutes(meeting.start)
         end = _minutes(meeting.end)
         if end <= start:
+            return None
+        if earliest_start is not None and start < earliest_start:
             return None
         if latest_end is not None and end > latest_end:
             return None
@@ -353,6 +362,7 @@ def _manual_project_candidates(
         set(constraints.allowed_days),
         blocked,
         constraints.max_sessions_per_day,
+        earliest_start=_earliest_start_minutes(constraints),
         latest_end=_latest_end_minutes(constraints),
         manual=True,
     )
@@ -374,6 +384,7 @@ def _course_candidates(
         name.strip().casefold() for name in selected.excluded_sections or [] if name.strip()
     }
     allowed_days = set(constraints.allowed_days)
+    earliest_start = _earliest_start_minutes(constraints)
     latest_end = _latest_end_minutes(constraints)
     result: list[_Candidate] = []
     seen: set[tuple] = set()
@@ -393,6 +404,7 @@ def _course_candidates(
             allowed_days,
             blocked,
             constraints.max_sessions_per_day,
+            earliest_start=earliest_start,
             latest_end=latest_end,
         )
         if candidate is None:

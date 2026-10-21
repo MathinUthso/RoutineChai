@@ -11,11 +11,20 @@ type LiveRefineProps = {
 };
 
 const GAP_MAX = 240;
+const START_MIN = 8 * 60;
+const START_MAX = 13 * 60;
 const END_MIN = 13 * 60;
 const END_MAX = 16 * 60 + 30;
 
 function hhmm(minutes: number): string {
   return `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
+}
+
+function startMinutes(value: string | null): number {
+  const match = /^(\d{1,2}):(\d{2})$/.exec(value?.trim() ?? "");
+  if (!match) return START_MIN;
+  const minutes = Number(match[1]) * 60 + Number(match[2]);
+  return Math.max(START_MIN, Math.min(START_MAX, minutes));
 }
 
 function endMinutes(value: string | null): number {
@@ -79,11 +88,13 @@ function Slider({
 export function LiveRefine({ constraints, busy, error, onChange }: LiveRefineProps) {
   const gapValue = constraints.max_gap_minutes ?? GAP_MAX;
   const daysValue = constraints.max_campus_days ?? 5;
+  const startValue = startMinutes(constraints.earliest_start);
   const endValue = endMinutes(constraints.latest_end);
   const sessionValue = constraints.max_sessions_per_day;
   const activeCount =
     (constraints.max_gap_minutes !== null ? 1 : 0) +
     (constraints.max_campus_days !== null ? 1 : 0) +
+    (constraints.earliest_start !== null ? 1 : 0) +
     (constraints.latest_end !== null ? 1 : 0) +
     (constraints.max_sessions_per_day !== 3 ? 1 : 0);
 
@@ -107,19 +118,19 @@ export function LiveRefine({ constraints, busy, error, onChange }: LiveRefinePro
 
       <div className="grid gap-x-5 gap-y-4 px-4 py-4">
         <Slider
-          name="max-gap"
-          label="Longest gap"
-          value={gapValue}
-          min={0}
-          max={GAP_MAX}
+          name="earliest-start"
+          label="Earliest start"
+          value={startValue}
+          min={START_MIN}
+          max={START_MAX}
           step={15}
           valueLabel={
-            gapValue >= GAP_MAX ? "No cap" : gapValue === 0 ? "No gap" : `≤ ${formatGap(gapValue)}`
+            startValue <= START_MIN ? "No cap" : `From ${formatTime(hhmm(startValue))}`
           }
-          minimumLabel="No gap"
-          maximumLabel="Any"
+          minimumLabel="Any"
+          maximumLabel={formatTime(hhmm(START_MAX))}
           onChange={(value) =>
-            onChange({ ...constraints, max_gap_minutes: value >= GAP_MAX ? null : value })
+            onChange({ ...constraints, earliest_start: value <= START_MIN ? null : hhmm(value) })
           }
         />
         <Slider
@@ -134,6 +145,22 @@ export function LiveRefine({ constraints, busy, error, onChange }: LiveRefinePro
           maximumLabel="Any"
           onChange={(value) =>
             onChange({ ...constraints, latest_end: value >= END_MAX ? null : hhmm(value) })
+          }
+        />
+        <Slider
+          name="max-gap"
+          label="Longest gap"
+          value={gapValue}
+          min={0}
+          max={GAP_MAX}
+          step={15}
+          valueLabel={
+            gapValue >= GAP_MAX ? "No cap" : gapValue === 0 ? "No gap" : `≤ ${formatGap(gapValue)}`
+          }
+          minimumLabel="No gap"
+          maximumLabel="Any"
+          onChange={(value) =>
+            onChange({ ...constraints, max_gap_minutes: value >= GAP_MAX ? null : value })
           }
         />
         <Slider
@@ -176,6 +203,7 @@ export function LiveRefine({ constraints, busy, error, onChange }: LiveRefinePro
               ...constraints,
               max_gap_minutes: null,
               max_campus_days: null,
+              earliest_start: null,
               latest_end: null,
               max_sessions_per_day: 3,
             })
