@@ -77,7 +77,7 @@ export function ProgramToggle({ values, programs, counts, disabled, onChange }: 
         })}
       </div>
       <p className="mono-label mt-2 leading-relaxed text-ink-faint">
-        Courses from every checked program are available.
+        
       </p>
     </fieldset>
   );
