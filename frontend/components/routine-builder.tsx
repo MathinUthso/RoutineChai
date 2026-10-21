@@ -130,6 +130,8 @@ export function RoutineBuilder() {
   const [liveError, setLiveError] = useState<string | null>(null);
   const [pendingSwap, setPendingSwap] = useState<{ code: string; section: string } | null>(null);
   const [swapError, setSwapError] = useState<string | null>(null);
+  /** True when the live rules are what emptied the plan list. */
+  const [liveBlocked, setLiveBlocked] = useState(false);
 
   const [restoreStep, setRestoreStep] = useState<1 | 2 | 3 | null>(null);
   const [bannerRequested, setBannerRequested] = useState(false);
@@ -255,6 +257,7 @@ export function RoutineBuilder() {
     setLiveError(null);
     setSwapError(null);
     setPendingSwap(null);
+    setLiveBlocked(false);
   };
 
   const handleProgramChange = (next: Program[]) => {
@@ -334,6 +337,7 @@ export function RoutineBuilder() {
     setCustomRoutine(null);
     setLiveError(null);
     setSwapError(null);
+    setLiveBlocked(false);
     setStep(3);
 
     try {
@@ -429,6 +433,7 @@ export function RoutineBuilder() {
       setPage(nextPage);
       setSelectedRoutineId(result.routines[0]?.id ?? null);
       setCustomRoutine(null);
+      setLiveBlocked(false);
     } catch (error) {
       if (
         controller.signal.aborted ||
@@ -446,6 +451,7 @@ export function RoutineBuilder() {
     async (
       nextConstraints: Constraints,
       nextPreferences: Record<string, CoursePreference>,
+      cause: "rules" | "sections",
     ) => {
       requestRef.current?.abort();
       const controller = new AbortController();
@@ -467,6 +473,9 @@ export function RoutineBuilder() {
         setPage(0);
         setPageError(null);
         setSelectedRoutineId(result.routines[0]?.id ?? null);
+        // Only the live rules are to blame when a rule change empties the list;
+        // a section that was marked full is a different story.
+        setLiveBlocked(cause === "rules" && result.routines.length === 0);
       } catch (error) {
         if (
           controller.signal.aborted ||
@@ -485,6 +494,7 @@ export function RoutineBuilder() {
   const scheduleLive = (
     nextConstraints: Constraints,
     nextPreferences: Record<string, CoursePreference>,
+    cause: "rules" | "sections",
   ) => {
     requestRef.current?.abort();
     swapRef.current?.abort();
@@ -496,7 +506,7 @@ export function RoutineBuilder() {
     setPendingSwap(null);
     liveTimerRef.current = window.setTimeout(() => {
       liveTimerRef.current = null;
-      void runLive(nextConstraints, nextPreferences);
+      void runLive(nextConstraints, nextPreferences, cause);
     }, LIVE_DEBOUNCE_MS);
   };
 
@@ -520,7 +530,24 @@ export function RoutineBuilder() {
 
   const handleLiveConstraints = (next: Constraints) => {
     setConstraints(next);
-    scheduleLive(next, preferences);
+    scheduleLive(next, preferences, "rules");
+  };
+
+  /**
+   * Clears every live rule and re-runs the solver, which brings back the
+   * plans the rules had filtered out.
+   */
+  const handleResetLive = () => {
+    const next: Constraints = {
+      ...constraints,
+      max_gap_minutes: null,
+      max_campus_days: null,
+      earliest_start: null,
+      latest_end: null,
+      max_sessions_per_day: 3,
+    };
+    setConstraints(next);
+    scheduleLive(next, preferences, "rules");
   };
 
   const handleMarkFull = (code: string, section: string) => {
@@ -536,7 +563,7 @@ export function RoutineBuilder() {
       },
     };
     setPreferences(nextPreferences);
-    scheduleLive(constraints, nextPreferences);
+    scheduleLive(constraints, nextPreferences, "sections");
   };
 
   const handleRestoreSection = (code: string, section: string) => {
@@ -551,7 +578,7 @@ export function RoutineBuilder() {
       },
     };
     setPreferences(nextPreferences);
-    scheduleLive(constraints, nextPreferences);
+    scheduleLive(constraints, nextPreferences, "sections");
   };
 
   const handleSwap = async (code: string, section: string) => {
@@ -751,6 +778,8 @@ export function RoutineBuilder() {
                     setCustomRoutine(null);
                     setSwapError(null);
                   }}
+                  liveBlocked={liveBlocked}
+                  onResetLive={handleResetLive}
                   onBack={() => setStep(2)}
                   onRetry={handleGenerate}
                   onPageChange={handlePageChange}

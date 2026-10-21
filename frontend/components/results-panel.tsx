@@ -16,7 +16,8 @@ import type {
   ScoreBreakdown,
 } from "@/lib/types";
 import { ArrowLeftIcon, ArrowRightIcon, CalendarIcon } from "./icons";
-import { LiveRefine } from "./live-refine";
+import { activeLiveRules, LiveRefine } from "./live-refine";
+import type { LiveRule } from "./live-refine";
 import { SectionBoard } from "./section-board";
 import { WeeklyCalendar } from "./weekly-calendar";
 
@@ -45,6 +46,9 @@ type ResultsPanelProps = {
   onMarkFull: (code: string, section: string) => void;
   onRestoreSection: (code: string, section: string) => void;
   onClearCustom: () => void;
+  /** True when the live rules are what emptied the plan list. */
+  liveBlocked: boolean;
+  onResetLive: () => void;
   onBack: () => void;
   onRetry: () => void;
   onPageChange: (page: number) => void;
@@ -105,59 +109,92 @@ function DiagnosticsBlock({ diagnostics }: { diagnostics: Diagnostics[] }) {
 
 function EmptyResult({
   diagnostics,
+  liveRules,
+  liveBlocked,
   onBack,
+  onResetLive,
 }: {
   diagnostics: Diagnostics[];
+  liveRules: LiveRule[];
+  liveBlocked: boolean;
   onBack: () => void;
+  onResetLive: () => void;
 }) {
   return (
-    <div className="mt-6 border border-rule bg-paper-raised shadow-sheet">
+    <div className="border border-rule bg-paper-raised shadow-sheet">
       <div className="border-b border-rule px-5 py-4">
-        <p className="mono-label text-coral-ink">No routines found</p>
+        <p className="mono-label text-coral-ink">
+          {liveBlocked ? "Live rules leave no combination" : "No routines found"}
+        </p>
         <h3 className="mt-1 text-[1.35rem] font-medium tracking-[-0.01em] text-ink">
-          The constraints leave no valid timetable.
+          {liveBlocked
+            ? "These live rules leave no valid timetable."
+            : "The constraints leave no valid timetable."}
         </h3>
+        {liveBlocked ? (
+          <p className="mt-2 max-w-[58ch] text-[0.875rem] leading-relaxed text-ink-soft">
+            Every section combination breaks at least one live rule. Reset them to bring the
+            previous plans back, or relax one rule at a time.
+          </p>
+        ) : null}
       </div>
+
       <div className="px-5 py-5">
-        {diagnostics.length > 0 ? (
-          <ul className="space-y-2">
-            {diagnostics.map((item, index) => (
-              <li
-                key={`${item.reason}-${index}`}
-                className="border-l-2 border-coral/70 pl-3 text-[0.875rem] leading-relaxed text-ink-soft"
-              >
-                {item.message}
-              </li>
+        {liveRules.length > 0 ? (
+          <dl className="grid gap-x-6 gap-y-2 border-b border-rule pb-4 sm:grid-cols-2">
+            {liveRules.map((rule) => (
+              <div key={rule.key} className="flex items-baseline justify-between gap-3">
+                <dt className="mono-label text-ink-faint">{rule.label}</dt>
+                <dd className="font-mono text-[0.75rem] tabular text-ink">{rule.value}</dd>
+              </div>
             ))}
-          </ul>
-        ) : (
+          </dl>
+        ) : null}
+
+        {diagnostics.length === 0 ? (
           <p className="text-[0.875rem] leading-relaxed text-ink-soft">
             No combination of sections satisfies the current rules.
           </p>
+        ) : null}
+
+        {liveBlocked ? null : (
+          <div className="mt-5 grid gap-2 border-t border-rule pt-4 sm:grid-cols-2">
+            {[
+              "Allow another teaching day.",
+              "Raise the sessions-per-day cap.",
+              "Remove or shorten a blocked window.",
+              "Clear a section pin or faculty preference.",
+            ].map((hint) => (
+              <p key={hint} className="flex items-start gap-2 text-[0.8125rem] leading-relaxed text-ink-soft">
+                <span aria-hidden className="mt-[7px] h-1 w-1 shrink-0 bg-coral" />
+                {hint}
+              </p>
+            ))}
+          </div>
         )}
 
-        <div className="mt-5 grid gap-2 border-t border-rule pt-4 sm:grid-cols-2">
-          {[
-            "Allow another teaching day.",
-            "Raise the sessions-per-day cap.",
-            "Remove or shorten a blocked window.",
-            "Clear a section pin or faculty preference.",
-          ].map((hint) => (
-            <p key={hint} className="flex items-start gap-2 text-[0.8125rem] leading-relaxed text-ink-soft">
-              <span aria-hidden className="mt-[7px] h-1 w-1 shrink-0 bg-coral" />
-              {hint}
-            </p>
-          ))}
-        </div>
-
-        <div className="mt-5 flex flex-wrap gap-3">
+        <div
+          className={`mt-5 flex flex-wrap items-center gap-3 ${
+            liveRules.length > 0 ? "" : "border-t border-rule pt-4"
+          }`}
+        >
+          {liveRules.length > 0 ? (
+            <button
+              type="button"
+              onClick={onResetLive}
+              className="press inline-flex min-h-11 items-center gap-2 bg-green px-4 text-[0.9375rem] text-paper hover:bg-green-deep"
+            >
+              Reset live constraints
+              <ArrowRightIcon className="h-4 w-4" />
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={onBack}
-            className="press inline-flex min-h-11 items-center gap-2 bg-green px-4 text-[0.9375rem] text-paper hover:bg-green-deep"
+            className="press inline-flex min-h-11 items-center gap-2 border border-rule-strong px-4 text-[0.9375rem] text-ink hover:border-ink"
           >
+            <ArrowLeftIcon className="h-4 w-4" />
             Adjust constraints
-            <ArrowRightIcon className="h-4 w-4" />
           </button>
         </div>
       </div>
@@ -397,12 +434,15 @@ export function ResultsPanel({
   onMarkFull,
   onRestoreSection,
   onClearCustom,
+  liveBlocked,
+  onResetLive,
   onBack,
   onRetry,
   onPageChange,
 }: ResultsPanelProps) {
   const reduceMotion = useReducedMotion();
   const routines = result?.routines ?? [];
+  const liveRules = activeLiveRules(constraints);
   const rankedSelected = routines.find((routine) => routine.id === selectedId) ?? routines[0];
   const selected = customRoutine ?? rankedSelected;
   const selectedRank = routines.findIndex((routine) => routine.id === rankedSelected?.id);
@@ -498,11 +538,7 @@ export function ResultsPanel({
         </div>
       )}
 
-      {status === "ready" && result && routines.length === 0 && (
-        <EmptyResult diagnostics={result.diagnostics} onBack={onBack} />
-      )}
-
-      {status === "ready" && result && routines.length > 0 && (
+      {status === "ready" && result && (
         <>
           <DiagnosticsBlock diagnostics={result.diagnostics} />
 
@@ -524,10 +560,11 @@ export function ResultsPanel({
                 onChange={onConstraintsChange}
               />
 
-              <section
-                aria-label="Plans"
-                className="border border-rule bg-paper-raised shadow-sheet"
-              >
+              {routines.length > 0 ? (
+                <section
+                  aria-label="Plans"
+                  className="border border-rule bg-paper-raised shadow-sheet"
+                >
                 <div className="flex items-baseline justify-between gap-3 border-b border-rule px-4 py-2.5">
                   <h3
                     className="mono-label text-ink"
@@ -741,62 +778,77 @@ export function ResultsPanel({
                     The solver stopped at its search cap; the total is a lower bound.
                   </p>
                 )}
-              </section>
+                </section>
+              ) : null}
 
-              <div className="flex flex-wrap items-center gap-3">
-                <button
-                  type="button"
-                  onClick={onBack}
-                  className="press inline-flex min-h-11 items-center gap-2 border border-rule-strong px-4 text-[0.9375rem] text-ink hover:border-ink hover:bg-paper"
-                >
-                  <ArrowLeftIcon className="h-4 w-4" />
-                  Adjust constraints
-                </button>
-                <button
-                  type="button"
-                  onClick={onRetry}
-                  className="cue-underline inline-flex min-h-11 items-center gap-2 px-1 text-[0.9375rem] text-ink-soft hover:text-ink"
-                >
-                  Re-run solver
-                </button>
-              </div>
+              {routines.length > 0 ? (
+                <div className="flex flex-wrap items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={onBack}
+                    className="press inline-flex min-h-11 items-center gap-2 border border-rule-strong px-4 text-[0.9375rem] text-ink hover:border-ink hover:bg-paper"
+                  >
+                    <ArrowLeftIcon className="h-4 w-4" />
+                    Adjust constraints
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onRetry}
+                    className="cue-underline inline-flex min-h-11 items-center gap-2 px-1 text-[0.9375rem] text-ink-soft hover:text-ink"
+                  >
+                    Re-run solver
+                  </button>
+                </div>
+              ) : null}
             </aside>
 
             <div className="order-1 min-w-0 lg:col-start-2 lg:row-start-1">
-              <AnimatePresence mode="wait" initial={false}>
-                {selected && (
-                  <motion.div
-                    key={selected.id}
-                    initial={reduceMotion ? false : panelVariants.enter}
-                    animate={panelVariants.center}
-                    exit={reduceMotion ? { opacity: 0 } : panelVariants.exit}
-                    transition={{
-                      duration: reduceMotion ? 0 : durations.panel,
-                      ease: [0.2, 0.7, 0.2, 1],
-                    }}
-                  >
-                    <RoutineDetail routine={selected} planName={planName} catalog={catalog} />
-                  </motion.div>
-                )}
-              </AnimatePresence>
+              {routines.length === 0 ? (
+                <EmptyResult
+                  diagnostics={result.diagnostics}
+                  liveRules={liveRules}
+                  liveBlocked={liveBlocked}
+                  onBack={onBack}
+                  onResetLive={onResetLive}
+                />
+              ) : (
+                <AnimatePresence mode="wait" initial={false}>
+                  {selected && (
+                    <motion.div
+                      key={selected.id}
+                      initial={reduceMotion ? false : panelVariants.enter}
+                      animate={panelVariants.center}
+                      exit={reduceMotion ? { opacity: 0 } : panelVariants.exit}
+                      transition={{
+                        duration: reduceMotion ? 0 : durations.panel,
+                        ease: [0.2, 0.7, 0.2, 1],
+                      }}
+                    >
+                      <RoutineDetail routine={selected} planName={planName} catalog={catalog} />
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              )}
             </div>
 
-            <aside
-              aria-label="Section board"
-              className="order-3 min-w-0 lg:col-start-1 lg:col-span-2 lg:row-start-2 xl:col-start-3 xl:col-span-1 xl:row-start-1 xl:sticky xl:top-4 xl:max-h-[calc(100vh-2rem)] xl:overflow-y-auto"
-            >
-              <SectionBoard
-                routine={selected ?? routines[0]}
-                catalog={catalog}
-                constraints={constraints}
-                preferences={preferences}
-                pending={pendingSwap}
-                error={swapError}
-                onSwap={onSwap}
-                onMarkFull={onMarkFull}
-                onRestore={onRestoreSection}
-              />
-            </aside>
+            {routines.length > 0 ? (
+              <aside
+                aria-label="Section board"
+                className="order-3 min-w-0 lg:col-start-1 lg:col-span-2 lg:row-start-2 xl:col-start-3 xl:col-span-1 xl:row-start-1 xl:sticky xl:top-4 xl:max-h-[calc(100vh-2rem)] xl:overflow-y-auto"
+              >
+                <SectionBoard
+                  routine={selected ?? routines[0]}
+                  catalog={catalog}
+                  constraints={constraints}
+                  preferences={preferences}
+                  pending={pendingSwap}
+                  error={swapError}
+                  onSwap={onSwap}
+                  onMarkFull={onMarkFull}
+                  onRestore={onRestoreSection}
+                />
+              </aside>
+            ) : null}
           </div>
         </>
       )}

@@ -16,6 +16,58 @@ const START_MAX = 13 * 60;
 const END_MIN = 13 * 60;
 const END_MAX = 16 * 60 + 30;
 
+export interface LiveRule {
+  key: string;
+  label: string;
+  value: string;
+}
+
+/**
+ * The live rules currently in force, as label/value pairs. Shared by the
+ * slider panel and the empty state so both name the rules the same way.
+ */
+export function activeLiveRules(constraints: Constraints): LiveRule[] {
+  const rules: LiveRule[] = [];
+
+  if (constraints.earliest_start !== null) {
+    rules.push({
+      key: "earliest_start",
+      label: "Earliest start",
+      value: `From ${formatTime(constraints.earliest_start)}`,
+    });
+  }
+  if (constraints.latest_end !== null) {
+    rules.push({
+      key: "latest_end",
+      label: "Latest end",
+      value: `By ${formatTime(constraints.latest_end)}`,
+    });
+  }
+  if (constraints.max_gap_minutes !== null) {
+    rules.push({
+      key: "max_gap_minutes",
+      label: "Longest gap",
+      value: constraints.max_gap_minutes === 0 ? "No gap" : `≤ ${formatGap(constraints.max_gap_minutes)}`,
+    });
+  }
+  if (constraints.max_campus_days !== null) {
+    rules.push({
+      key: "max_campus_days",
+      label: "Campus days",
+      value: `≤ ${constraints.max_campus_days} ${constraints.max_campus_days === 1 ? "day" : "days"}`,
+    });
+  }
+  if (constraints.max_sessions_per_day !== 3) {
+    rules.push({
+      key: "max_sessions_per_day",
+      label: "Classes / day",
+      value: `≤ ${constraints.max_sessions_per_day} / day`,
+    });
+  }
+
+  return rules;
+}
+
 function hhmm(minutes: number): string {
   return `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
 }
