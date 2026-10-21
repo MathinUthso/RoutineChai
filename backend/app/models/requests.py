@@ -2,11 +2,27 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.models.catalog import Day, Meeting
 
 DEFAULT_ALLOWED_DAYS: tuple[Day, ...] = ("Sat", "Sun", "Mon", "Tue", "Wed")
+TIME_PATTERN = r"^(?:[01]\d|2[0-3]):[0-5]\d$"
+
+
+class ManualProject(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    section: str = Field(min_length=1, max_length=16)
+    day: Day
+    start: str = Field(pattern=TIME_PATTERN)
+    end: str = Field(pattern=TIME_PATTERN)
+
+    @model_validator(mode="after")
+    def validate_meeting(self) -> ManualProject:
+        if self.end <= self.start:
+            raise ValueError("manual project meeting must end after it starts")
+        return self
 
 
 class SelectedCourse(BaseModel):
@@ -16,6 +32,7 @@ class SelectedCourse(BaseModel):
     allowed_sections: list[str] | None = None
     preferred_faculty: list[str] | None = None
     excluded_faculty: list[str] | None = None
+    manual_project: ManualProject | None = None
 
 
 class BlockedInterval(BaseModel):
@@ -54,6 +71,7 @@ class RoutineCourse(BaseModel):
     credits: int
     kind: Literal["theory", "lab"]
     meetings: list[Meeting]
+    manual: bool = False
 
 
 class RoutineStats(BaseModel):

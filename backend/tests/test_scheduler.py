@@ -755,6 +755,175 @@ def test_offset_past_the_end_returns_an_empty_page(catalog, request_payload, mak
 
 
 # --------------------------------------------------------------------------- #
+# manual project slots
+# --------------------------------------------------------------------------- #
+def _project_catalog(*extra_courses):
+    official = _course(
+        "CSE 4000A",
+        "Final Year Design Project",
+        3,
+        "theory",
+        [
+            _section("A", "AR", [_meeting("Mon", "09:00", "10:30")]),
+        ],
+    )
+    return _catalog(official, *extra_courses)
+
+
+def test_manual_project_uses_section_meeting_and_official_faculty(make_catalog, make_request) -> None:
+    result = generate(
+        make_catalog(_project_catalog()),
+        make_request(
+            _request(
+                BSCSE,
+                [
+                    {
+                        "code": "CSE 4000A",
+                        "manual_project": {
+                            "section": "A",
+                            "day": "Sat",
+                            "start": "09:00",
+                            "end": "11:00",
+                        },
+                    }
+                ],
+            )
+        ),
+    )
+
+    assert routines(result)
+    course = courses_of(routines(result)[0])[0]
+    assert course_code(course) == "CSE 4000A"
+    assert section_name(course) == "A"
+    assert _attr(course, "faculty") == FACULTY_NAMES["AR"]
+    assert _attr(course, "manual") is True
+    meetings = _attr(course, "meetings")
+    assert len(meetings) == 1
+    assert _minutes(_attr(meetings[0], "start")) == 9 * 60
+    assert _minutes(_attr(meetings[0], "end")) == 11 * 60
+    assert _attr(meetings[0], "room") == "TBA"
+
+
+def test_manual_project_unknown_section_gets_tba_faculty(make_catalog, make_request) -> None:
+    result = generate(
+        make_catalog(_project_catalog()),
+        make_request(
+            _request(
+                BSCSE,
+                [
+                    {
+                        "code": "CSE 4000A",
+                        "manual_project": {
+                            "section": "Z",
+                            "day": "Sun",
+                            "start": "13:00",
+                            "end": "15:00",
+                        },
+                    }
+                ],
+            )
+        ),
+    )
+
+    assert routines(result)
+    course = courses_of(routines(result)[0])[0]
+    assert section_name(course) == "Z"
+    assert _attr(course, "faculty") == "TBA"
+
+
+def test_manual_project_participates_in_clash_checks(make_catalog, make_request) -> None:
+    conflicting = _course(
+        "TST 1001",
+        "Conflicting Course",
+        3,
+        "theory",
+        [_section("A", "TA", [_meeting("Sat", "10:00", "11:00")])],
+    )
+    result = generate(
+        make_catalog(_project_catalog(conflicting)),
+        make_request(
+            _request(
+                BSCSE,
+                [
+                    {
+                        "code": "CSE 4000A",
+                        "manual_project": {
+                            "section": "A",
+                            "day": "Sat",
+                            "start": "09:00",
+                            "end": "11:00",
+                        },
+                    },
+                    {"code": "TST 1001"},
+                ],
+            )
+        ),
+    )
+
+    assert routines(result) == []
+    assert diagnostics(result), "the manual meeting must be checked for clashes"
+
+
+def test_manual_project_respects_excluded_faculty(make_catalog, make_request) -> None:
+    result = generate(
+        make_catalog(_project_catalog()),
+        make_request(
+            _request(
+                BSCSE,
+                [
+                    {
+                        "code": "CSE 4000A",
+                        "excluded_faculty": ["AR"],
+                        "manual_project": {
+                            "section": "A",
+                            "day": "Sat",
+                            "start": "09:00",
+                            "end": "11:00",
+                        },
+                    }
+                ],
+            )
+        ),
+    )
+
+    assert routines(result) == []
+    assert "CSE 4000A" in excluded_courses(result).get("courses_without_candidates", set())
+
+
+def test_manual_project_is_rejected_for_non_project_course(make_catalog, make_request) -> None:
+    catalog_payload = _catalog(
+        _course(
+            "TST 1001",
+            "Not a Project",
+            3,
+            "theory",
+            [_section("A", "AR", [_meeting("Sat", "09:00", "10:30")])],
+        )
+    )
+
+    with pytest.raises(ValueError, match="manual project sections"):
+        generate(
+            make_catalog(catalog_payload),
+            make_request(
+                _request(
+                    BSCSE,
+                    [
+                        {
+                            "code": "TST 1001",
+                            "manual_project": {
+                                "section": "A",
+                                "day": "Sat",
+                                "start": "09:00",
+                                "end": "10:30",
+                            },
+                        }
+                    ],
+                )
+            ),
+        )
+
+
+# --------------------------------------------------------------------------- #
 # randomized validity + performance
 # --------------------------------------------------------------------------- #
 def test_randomized_requests_are_always_valid(catalog, catalog_payload, make_request) -> None:

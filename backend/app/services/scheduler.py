@@ -4,7 +4,7 @@ import time
 from dataclasses import dataclass
 from typing import Literal
 
-from app.models.catalog import Catalog, Course, Section
+from app.models.catalog import Catalog, Course, Faculty, Meeting, Section
 from app.models.requests import (
     Constraints,
     Diagnostics,
@@ -19,6 +19,7 @@ from app.models.requests import (
 
 NODE_LIMIT = 200_000
 TIME_LIMIT_SECONDS = 2.0
+PROJECT_COURSE_CODES = frozenset({"CSE 4000A", "DS 4000A"})
 
 WINDOWS: dict[str, tuple[int, int]] = {
     "morning": (8 * 60 + 30, 12 * 60 + 30),
@@ -39,6 +40,7 @@ class _Candidate:
     meetings: tuple[Interval, ...]
     masks: tuple[tuple[str, int], ...]
     day_counts: tuple[tuple[str, int], ...]
+    manual: bool = False
 
 
 @dataclass(frozen=True)
@@ -82,6 +84,11 @@ def generate(catalog: Catalog, request: GenerateRequest) -> GenerateResult:
         if request.program not in course.programs:
             excluded.append(code)
             continue
+        if item.manual_project is not None and code not in PROJECT_COURSE_CODES:
+            raise ValueError(
+                "manual project sections are only available for "
+                + ", ".join(sorted(PROJECT_COURSE_CODES))
+            )
         selected.append((course, item))
 
     if excluded:
@@ -215,6 +222,7 @@ def _candidate(
     allowed_days: set[str],
     blocked: dict[str, int],
     max_sessions: int,
+    manual: bool = False,
 ) -> _Candidate | None:
     meetings: list[Interval] = []
     masks: dict[str, int] = {}
@@ -244,6 +252,7 @@ def _candidate(
         meetings=tuple(meetings),
         masks=tuple(sorted(masks.items())),
         day_counts=tuple(sorted(day_counts.items())),
+        manual=manual,
     )
 
 
@@ -271,12 +280,60 @@ def _excluded_faculty_identities(course: Course, selected: SelectedCourse) -> se
     return identities
 
 
+def _manual_project_candidates(
+    course: Course,
+    selected: SelectedCourse,
+    constraints: Constraints,
+    blocked: dict[str, int],
+) -> list[_Candidate]:
+    manual = selected.manual_project
+    if manual is None:
+        return []
+
+    section_name = manual.section.strip()
+    if not section_name:
+        return []
+
+    official = next(
+        (
+            section
+            for section in course.sections
+            if section.name.strip().casefold() == section_name.casefold()
+        ),
+        None,
+    )
+    excluded = {name.strip().casefold() for name in selected.excluded_faculty or [] if name.strip()}
+    if official is not None and excluded and _faculty_tokens(official) & excluded:
+        return []
+
+    section = Section(
+        name=section_name,
+        if_required=False,
+        faculty=official.faculty if official is not None else Faculty(name="TBA", initials=None),
+        meetings=[
+            Meeting(day=manual.day, start=manual.start, end=manual.end, room="TBA"),
+        ],
+    )
+    candidate = _candidate(
+        course,
+        section,
+        set(constraints.allowed_days),
+        blocked,
+        constraints.max_sessions_per_day,
+        manual=True,
+    )
+    return [candidate] if candidate is not None else []
+
+
 def _course_candidates(
     course: Course,
     selected: SelectedCourse,
     constraints: Constraints,
     blocked: dict[str, int],
 ) -> list[_Candidate]:
+    if selected.manual_project is not None:
+        return _manual_project_candidates(course, selected, constraints, blocked)
+
     allowed = {name.strip().casefold() for name in selected.allowed_sections or [] if name.strip()}
     excluded = {name.strip().casefold() for name in selected.excluded_faculty or [] if name.strip()}
     allowed_days = set(constraints.allowed_days)
@@ -501,6 +558,7 @@ def _routine(
                 credits=candidate.credits,
                 kind=candidate.kind,
                 meetings=list(candidate.section.meetings),
+                manual=candidate.manual,
             )
             for candidate in solution
         ],
