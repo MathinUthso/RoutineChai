@@ -66,7 +66,7 @@ export function ImpactVignette() {
           onClick={() => setRun((value) => value + 1)}
           aria-label="Replay building entrance animation"
           title="Replay"
-          className="absolute right-0 top-0 inline-flex p-1 text-ink-faint/55 transition-colors duration-[var(--duration-quick)] hover:text-ink focus-visible:text-ink focus-visible:outline-none"
+          className="absolute right-0 top-0 inline-flex h-7 w-7 items-center justify-center text-ink-faint/55 transition-colors duration-[var(--duration-quick)] hover:text-ink focus-visible:text-ink"
         >
           <ReplayIcon className="h-3.5 w-3.5" />
         </button>

@@ -142,7 +142,7 @@ export function SectionBoard({
           type="button"
           aria-expanded={showLegend}
           onClick={() => setShowLegend((value) => !value)}
-          className="cue-underline mono-label ml-auto text-ink-faint hover:text-ink"
+          className="cue-underline mono-label ml-auto inline-flex min-h-9 items-center px-1 text-ink-faint hover:text-ink"
         >
           {showLegend ? "Hide key" : "Show key"}
         </button>
@@ -215,7 +215,7 @@ export function SectionBoard({
                         disabled={busy}
                         title="Remove this section from the solver and re-rank the remaining plans."
                         onClick={() => onMarkFull(routineCourse.code, routineCourse.section)}
-                        className="cue-underline mono-label text-coral-ink disabled:opacity-50"
+                        className="cue-underline mono-label inline-flex min-h-9 items-center px-1 text-coral-ink disabled:opacity-50"
                       >
                         Mark full
                       </button>

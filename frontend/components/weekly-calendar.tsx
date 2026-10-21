@@ -195,7 +195,10 @@ export function WeeklyCalendar({ routine }: { routine: Routine }) {
         <h4 id={headingId} className="mono-label text-ink">
           Weekly grid
         </h4>
-        <p className="mono-label tabular text-ink-faint">Sat–Wed · 8:30 AM–4:30 PM</p>
+        <div className="flex items-baseline gap-3">
+          <p className="mono-label tabular text-ink-faint">Sat–Wed · 8:30 AM–4:30 PM</p>
+          <p className="mono-label text-ink-faint sm:hidden">Swipe →</p>
+        </div>
       </div>
 
       {placed.length === 0 ? (
