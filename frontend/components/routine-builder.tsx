@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { generateRoutines, getCatalog } from "@/lib/api";
 import { durations, panelVariants } from "@/lib/motion";
@@ -28,14 +28,15 @@ import { ResultsPanel } from "./results-panel";
 import { StepRail } from "./step-rail";
 import {
   clearSnapshot,
+  getConsentSnapshot,
+  getServerConsentSnapshot,
   pruneSnapshot,
-  readConsent,
   readSnapshot,
   SNAPSHOT_VERSION,
+  subscribeConsent,
   writeConsent,
   writeSnapshot,
 } from "@/lib/persist";
-import type { ConsentDecision } from "@/lib/persist";
 
 type CatalogState =
   | { status: "loading" }
@@ -51,6 +52,15 @@ type ResultState =
 const PAGE_SIZE = 10;
 /** Debounce for live refinements; the solver needs a moment to re-rank. */
 const LIVE_DEBOUNCE_MS = 320;
+
+/**
+ * `useSyncExternalStore` needs a stable subscribe function, and this store
+ * never changes: it only tells the component whether it is running in a
+ * browser, so the prompt stays out of the server-rendered HTML.
+ */
+const subscribeToNothing = () => () => {};
+const getClientFlag = () => true;
+const getServerFlag = () => false;
 
 function requestFor(
   programs: Program[],
@@ -121,15 +131,25 @@ export function RoutineBuilder() {
   const [pendingSwap, setPendingSwap] = useState<{ code: string; section: string } | null>(null);
   const [swapError, setSwapError] = useState<string | null>(null);
 
-  const [consent, setConsent] = useState<ConsentDecision | null>(null);
-  const [hydrated, setHydrated] = useState(false);
   const [restoreStep, setRestoreStep] = useState<1 | 2 | 3 | null>(null);
+  const [bannerRequested, setBannerRequested] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
 
   const panelRef = useRef<HTMLDivElement>(null);
   const stepHeadingRef = useRef<HTMLHeadingElement>(null);
   const requestRef = useRef<AbortController | null>(null);
   const swapRef = useRef<AbortController | null>(null);
   const liveTimerRef = useRef<number | null>(null);
+
+  // The consent cookie is read straight from the browser, so the prompt never
+  // waits on a cold API. On the server there is no cookie, so nothing renders
+  // there and the first client render matches.
+  const isClient = useSyncExternalStore(subscribeToNothing, getClientFlag, getServerFlag);
+  const consent = useSyncExternalStore(
+    subscribeConsent,
+    getConsentSnapshot,
+    getServerConsentSnapshot,
+  );
 
   useEffect(() => {
     const controller = new AbortController();
@@ -138,10 +158,7 @@ export function RoutineBuilder() {
       .then((catalog) => {
         setCatalogState({ status: "ready", catalog });
 
-        const decision = readConsent();
-        if (decision) setConsent(decision);
-
-        if (decision === "accepted") {
+        if (getConsentSnapshot() === "accepted") {
           const stored = readSnapshot();
           if (stored && stored.selectedCodes.length > 0) {
             const clean = pruneSnapshot(stored, catalog);
@@ -485,13 +502,13 @@ export function RoutineBuilder() {
 
   const handleAccept = () => {
     writeConsent("accepted");
-    setConsent("accepted");
+    setBannerRequested(false);
   };
 
   const handleDecline = () => {
     writeConsent("declined");
     clearSnapshot();
-    setConsent("declined");
+    setBannerRequested(false);
   };
 
   const handleForget = () => {
@@ -499,7 +516,6 @@ export function RoutineBuilder() {
     // left alone so in-progress work is not thrown away without warning.
     clearSnapshot();
     writeConsent("declined");
-    setConsent("declined");
   };
 
   const handleLiveConstraints = (next: Constraints) => {
@@ -745,7 +761,7 @@ export function RoutineBuilder() {
         </div>
       </main>
 
-      {hydrated && consent !== null && (
+      {isClient && consent !== null && (
         <div className="mx-auto flex w-full max-w-[1480px] flex-col gap-2 px-[var(--space-gutter)] pb-10 sm:flex-row sm:items-baseline sm:justify-between sm:gap-3">
           <p className="mono-label text-ink-faint">
             Details stay in this browser · expire after 30 days
@@ -754,7 +770,7 @@ export function RoutineBuilder() {
             {consent === "declined" ? (
               <button
                 type="button"
-                onClick={() => setConsent(null)}
+                onClick={() => setBannerRequested(true)}
                 className="press mono-label cue-underline text-ink"
               >
                 Save my details
@@ -772,7 +788,7 @@ export function RoutineBuilder() {
       )}
 
       <ConsentBanner
-        open={hydrated && consent === null}
+        open={isClient && (consent === null || bannerRequested)}
         onAccept={handleAccept}
         onDecline={handleDecline}
       />

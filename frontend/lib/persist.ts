@@ -14,6 +14,30 @@ export const MAX_AGE_SECONDS = RETENTION_DAYS * 24 * 60 * 60;
 
 export type ConsentDecision = "accepted" | "declined";
 
+/** Subscribers are notified whenever the consent cookie changes. */
+const consentListeners = new Set<() => void>();
+
+function notifyConsent() {
+  for (const listener of consentListeners) listener();
+}
+
+export function subscribeConsent(listener: () => void): () => void {
+  consentListeners.add(listener);
+  return () => {
+    consentListeners.delete(listener);
+  };
+}
+
+/** Snapshot for `useSyncExternalStore`; the value is a stable primitive. */
+export function getConsentSnapshot(): ConsentDecision | null {
+  return readConsent();
+}
+
+/** There are no cookies on the server, so the answer there is "not yet". */
+export function getServerConsentSnapshot(): ConsentDecision | null {
+  return null;
+}
+
 export interface PlannerSnapshot {
   v: typeof SNAPSHOT_VERSION;
   savedAt: string;
@@ -78,6 +102,7 @@ export function writeConsent(decision: ConsentDecision): void {
       decision,
     )}; Max-Age=${MAX_AGE_SECONDS}; Path=/; SameSite=Lax${secure}`;
     document.cookie = cookieString;
+    notifyConsent();
   } catch {
     // Ignore cookies disabled / SecurityError
   }
