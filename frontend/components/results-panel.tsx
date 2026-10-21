@@ -4,8 +4,8 @@ import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { buildRoutineCalendar, calendarFilename } from "@/lib/calendar";
 import { TONE_CLASS, toneFor } from "@/lib/course-tone";
 import { durations, panelVariants } from "@/lib/motion";
-import { formatGap, formatMeeting, formatTimeRange } from "@/lib/schedule";
-import { catalogSlotMinutes, longestGapMinutes, planLabel } from "@/lib/section-plan";
+import { formatGap, formatMeeting } from "@/lib/schedule";
+import { planLabel } from "@/lib/section-plan";
 import type {
   CatalogResponse,
   Constraints,
@@ -254,20 +254,7 @@ function downloadCalendar(routine: Routine) {
   window.setTimeout(() => URL.revokeObjectURL(href), 1000);
 }
 
-function RoutineDetail({
-  routine,
-  planName,
-  catalog,
-}: {
-  routine: Routine;
-  planName: string;
-  catalog: CatalogResponse | null;
-}) {
-  const longestGap = longestGapMinutes(
-    routine.courses.flatMap((course) => course.meetings),
-    catalogSlotMinutes(catalog),
-  );
-
+function RoutineDetail({ routine, planName }: { routine: Routine; planName: string }) {
   return (
     <div className="border border-rule bg-paper-raised shadow-sheet">
       <div className="flex flex-wrap items-start justify-between gap-4 border-b border-rule px-5 py-4">
@@ -298,41 +285,6 @@ function RoutineDetail({
             Google Calendar
           </button>
         </div>
-      </div>
-
-      <div className="mono-label flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-rule px-5 py-2 text-ink-faint">
-        <span title="Export repeats weekly for 16 classes from the next occurrence. Verify term dates and holidays before relying on it.">
-          ICS · 16 weekly classes
-        </span>
-        <span>Verify against the registrar notice</span>
-      </div>
-
-      <div className="grid grid-cols-2 divide-x divide-y divide-rule border-b border-rule sm:grid-cols-4 sm:divide-y-0">
-        {[
-          { label: "Credits", value: routine.stats.total_credits.toFixed(1) },
-          {
-            label: "Idle gaps",
-            value: formatGap(routine.stats.gap_minutes),
-            title: "Idle time between classes, counted only when it lasts a full class slot or more.",
-          },
-          {
-            label: "Longest gap",
-            value: formatGap(longestGap),
-            title: "The longest single break on any teaching day.",
-          },
-          {
-            label: "Span",
-            value:
-              routine.stats.earliest && routine.stats.latest
-                ? formatTimeRange(routine.stats.earliest, routine.stats.latest)
-                : "—",
-          },
-        ].map(({ label, value, title }) => (
-          <div key={label} className="px-4 py-3" title={title}>
-            <p className="mono-label text-ink-faint">{label}</p>
-            <p className="mt-1 font-mono text-[0.95rem] tabular text-ink">{value}</p>
-          </div>
-        ))}
       </div>
 
       <WeeklyCalendar routine={routine} />
@@ -824,7 +776,7 @@ export function ResultsPanel({
                         ease: [0.2, 0.7, 0.2, 1],
                       }}
                     >
-                      <RoutineDetail routine={selected} planName={planName} catalog={catalog} />
+                      <RoutineDetail routine={selected} planName={planName} />
                     </motion.div>
                   )}
                 </AnimatePresence>
