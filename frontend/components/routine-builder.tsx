@@ -30,6 +30,7 @@ import {
   clearSnapshot,
   getConsentSnapshot,
   getServerConsentSnapshot,
+  hasStoredSnapshot,
   pruneSnapshot,
   readSnapshot,
   SNAPSHOT_VERSION,
@@ -134,13 +135,19 @@ export function RoutineBuilder() {
   const [liveBlocked, setLiveBlocked] = useState(false);
 
   const [restoreStep, setRestoreStep] = useState<1 | 2 | 3 | null>(null);
-  const [bannerRequested, setBannerRequested] = useState(false);
+  const [restorePlan, setRestorePlan] = useState<{
+    planId: string | null;
+    sections: Record<string, string>;
+  } | null>(null);
   const [hydrated, setHydrated] = useState(false);
+  const [storageBlocked, setStorageBlocked] = useState(false);
+  const [storedDetails, setStoredDetails] = useState(() => hasStoredSnapshot());
 
   const panelRef = useRef<HTMLDivElement>(null);
   const stepHeadingRef = useRef<HTMLHeadingElement>(null);
   const requestRef = useRef<AbortController | null>(null);
   const swapRef = useRef<AbortController | null>(null);
+  const restoreRef = useRef<AbortController | null>(null);
   const liveTimerRef = useRef<number | null>(null);
 
   // The consent cookie is read straight from the browser, so the prompt never
@@ -162,15 +169,16 @@ export function RoutineBuilder() {
 
         if (getConsentSnapshot() === "accepted") {
           const stored = readSnapshot();
-          if (stored && stored.selectedCodes.length > 0) {
+          if (stored) {
             const clean = pruneSnapshot(stored, catalog);
             setPrograms(clean.programs);
             setSelectedCodes(clean.selectedCodes);
             setConstraints(clean.constraints);
             setPreferences(clean.preferences);
-            setStep(clean.step);
-            setSelectedRoutineId(clean.selectedRoutineId);
-            if (clean.step === 3) setRestoreStep(3);
+            // The step only makes sense once a course is on the list.
+            if (clean.selectedCodes.length > 0) setStep(clean.step);
+            setRestorePlan({ planId: clean.planId, sections: clean.sections });
+            if (clean.step === 3 && clean.selectedCodes.length > 0) setRestoreStep(3);
           }
         }
 
@@ -343,27 +351,41 @@ export function RoutineBuilder() {
     try {
       const result = await generateRoutines(request, controller.signal);
 
-      if (controller.signal.aborted) return;
+      if (controller.signal.aborted) return null;
       setResultState({ status: "ready", result });
       setSelectedRoutineId(result.routines[0]?.id ?? null);
+      return result;
     } catch (error) {
       if (
         controller.signal.aborted ||
         (error instanceof DOMException && error.name === "AbortError")
       ) {
-        return;
+        return null;
       }
       setResultState({ status: "error", message: errorMessage(error) });
+      return null;
     }
   };
 
   // Persist the student's choices only after they explicitly accept cookies.
-  // Debounced so rapid live refinements don't hammer localStorage.
+  // Debounced so rapid live refinements do not rewrite the cookie on every tick.
   useEffect(() => {
     if (!hydrated || consent !== "accepted") return;
 
     const timer = window.setTimeout(() => {
-      writeSnapshot({
+      const ranked =
+        resultState.status === "ready"
+          ? (resultState.result.routines.find((routine) => routine.id === selectedRoutineId) ??
+            resultState.result.routines[0] ??
+            null)
+          : null;
+      const openPlan = customRoutine ?? ranked;
+      const sections: Record<string, string> = {};
+      for (const course of openPlan?.courses ?? []) {
+        sections[course.code] = course.section;
+      }
+
+      const written = writeSnapshot({
         v: SNAPSHOT_VERSION,
         savedAt: new Date().toISOString(),
         programs,
@@ -371,8 +393,12 @@ export function RoutineBuilder() {
         constraints,
         preferences,
         step,
-        selectedRoutineId,
+        planId: customRoutine ? null : selectedRoutineId,
+        sections,
       });
+
+      setStorageBlocked(!written);
+      setStoredDetails(written);
     }, 400);
 
     return () => window.clearTimeout(timer);
@@ -385,7 +411,71 @@ export function RoutineBuilder() {
     preferences,
     step,
     selectedRoutineId,
+    customRoutine,
+    resultState,
   ]);
+
+  /**
+   * Puts the plan the student had open back on screen: the ranked plan they
+   * were reading, or the section combination they had swapped in.
+   */
+  const applyRestorePlan = async (result: GenerateResult) => {
+    const plan = restorePlan;
+    setRestorePlan(null);
+    if (!plan) return;
+
+    const matches = (routine: Routine) =>
+      Object.entries(plan.sections).every(
+        ([code, section]) =>
+          routine.courses.find((course) => course.code === code)?.section === section,
+      );
+
+    const ranked = result.routines.find((routine) => matches(routine));
+    if (ranked) {
+      setSelectedRoutineId(ranked.id);
+      return;
+    }
+
+    if (plan.planId) {
+      const byId = result.routines.find((routine) => routine.id === plan.planId);
+      if (byId) {
+        setSelectedRoutineId(byId.id);
+        return;
+      }
+    }
+
+    if (Object.keys(plan.sections).length === 0) return;
+
+    // The student had swapped sections in, so ask for that exact combination.
+    restoreRef.current?.abort();
+    const controller = new AbortController();
+    restoreRef.current = controller;
+
+    const request = requestFor(programs, selected, preferences, constraints, 0);
+    const pinned: GenerateRequest = {
+      ...request,
+      courses: request.courses.map((course) => ({
+        ...course,
+        allowed_sections: plan.sections[course.code]
+          ? [plan.sections[course.code]]
+          : course.allowed_sections,
+      })),
+      limit: 1,
+      offset: 0,
+    };
+
+    try {
+      const pinnedResult = await generateRoutines(pinned, controller.signal);
+      if (controller.signal.aborted) return;
+      const routine = pinnedResult.routines[0];
+      if (routine) {
+        setCustomRoutine(routine);
+        setSelectedRoutineId(null);
+      }
+    } catch {
+      // Leave the ranked plans as they are.
+    }
+  };
 
   // When a previous visit ended on the Timetable tab, regenerate the plans
   // once the catalog is ready so the routine is waiting for them.
@@ -393,7 +483,10 @@ export function RoutineBuilder() {
     if (!restoreStep || !catalog || !hydrated) return;
 
     const timer = window.setTimeout(() => {
-      void handleGenerate();
+      void (async () => {
+        const result = await handleGenerate();
+        if (result) await applyRestorePlan(result);
+      })();
       setRestoreStep(null);
     }, reduceMotion ? 0 : 200);
 
@@ -512,13 +605,12 @@ export function RoutineBuilder() {
 
   const handleAccept = () => {
     writeConsent("accepted");
-    setBannerRequested(false);
   };
 
   const handleDecline = () => {
     writeConsent("declined");
     clearSnapshot();
-    setBannerRequested(false);
+    setStoredDetails(false);
   };
 
   const handleForget = () => {
@@ -526,6 +618,7 @@ export function RoutineBuilder() {
     // left alone so in-progress work is not thrown away without warning.
     clearSnapshot();
     writeConsent("declined");
+    setStoredDetails(false);
   };
 
   const handleLiveConstraints = (next: Constraints) => {
@@ -790,37 +883,16 @@ export function RoutineBuilder() {
         </div>
       </main>
 
-      {isClient && consent !== null && (
-        <div className="mx-auto flex w-full max-w-[1480px] flex-col gap-2 px-[var(--space-gutter)] pb-10 sm:flex-row sm:items-baseline sm:justify-between sm:gap-3">
-          <p className="mono-label text-ink-faint">
-            Details stay in this browser · expire after 30 days
-          </p>
-          <div className="flex flex-wrap items-center gap-3">
-            {consent === "declined" ? (
-              <button
-                type="button"
-                onClick={() => setBannerRequested(true)}
-                className="press mono-label cue-underline text-ink"
-              >
-                Save my details
-              </button>
-            ) : null}
-            <button
-              type="button"
-              onClick={handleForget}
-              className="press mono-label cue-underline text-ink-faint hover:text-coral-ink"
-            >
-              Forget saved details
-            </button>
-          </div>
-        </div>
-      )}
-
-      <ConsentBanner
-        open={isClient && (consent === null || bannerRequested)}
-        onAccept={handleAccept}
-        onDecline={handleDecline}
-      />
+      {isClient ? (
+        <ConsentBanner
+          decision={consent}
+          stored={storedDetails}
+          storageBlocked={storageBlocked}
+          onAccept={handleAccept}
+          onDecline={handleDecline}
+          onForget={handleForget}
+        />
+      ) : null}
     </>
   );
 }

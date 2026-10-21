@@ -7,12 +7,33 @@ import type {
 } from "./types";
 
 export const CONSENT_COOKIE = "routinechai.consent";
-export const STATE_STORAGE_KEY = "routinechai.state";
-export const SNAPSHOT_VERSION = 1;
+export const STATE_COOKIE = "routinechai.state";
+export const STATE_CHUNKS_COOKIE = "routinechai.state.chunks";
+export const SNAPSHOT_VERSION = 2;
 export const RETENTION_DAYS = 30;
 export const MAX_AGE_SECONDS = RETENTION_DAYS * 24 * 60 * 60;
 
+/**
+ * A cookie holds roughly 4 KB including its attributes. The snapshot is split
+ * into chunks well below that, because percent-encoding can inflate a chunk.
+ */
+const CHUNK_SIZE = 2000;
+
 export type ConsentDecision = "accepted" | "declined";
+
+export interface PlannerSnapshot {
+  v: typeof SNAPSHOT_VERSION;
+  savedAt: string;
+  programs: Program[];
+  selectedCodes: string[];
+  constraints: Constraints;
+  preferences: Record<string, CoursePreference>;
+  step: 1 | 2 | 3;
+  /** Ranked plan the student had open, when it was a ranked one. */
+  planId: string | null;
+  /** Course code to section label of the plan the student had open. */
+  sections: Record<string, string>;
+}
 
 /** Subscribers are notified whenever the consent cookie changes. */
 const consentListeners = new Set<() => void>();
@@ -38,19 +59,79 @@ export function getServerConsentSnapshot(): ConsentDecision | null {
   return null;
 }
 
-export interface PlannerSnapshot {
-  v: typeof SNAPSHOT_VERSION;
-  savedAt: string;
-  programs: Program[];
-  selectedCodes: string[];
-  constraints: Constraints;
-  preferences: Record<string, CoursePreference>;
-  step: 1 | 2 | 3;
-  selectedRoutineId: string | null;
-}
-
 function safeIsBrowser(): boolean {
   return typeof window !== "undefined" && typeof document !== "undefined";
+}
+
+function readCookie(name: string): string | null {
+  if (!safeIsBrowser()) return null;
+
+  try {
+    const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const match = document.cookie.match(
+      new RegExp(`(?:^|;\\s*)${escaped}=([^;]*)`),
+    );
+    if (!match) return null;
+    return decodeURIComponent(match[1]);
+  } catch {
+    return null;
+  }
+}
+
+function writeCookie(name: string, value: string): void {
+  if (!safeIsBrowser()) return;
+
+  const secure = window.location.protocol === "https:" ? "; Secure" : "";
+  document.cookie = `${name}=${encodeURIComponent(
+    value,
+  )}; Max-Age=${MAX_AGE_SECONDS}; Path=/; SameSite=Lax${secure}`;
+}
+
+function deleteCookie(name: string): void {
+  if (!safeIsBrowser()) return;
+
+  const secure = window.location.protocol === "https:" ? "; Secure" : "";
+  document.cookie = `${name}=; Max-Age=0; Path=/; SameSite=Lax${secure}`;
+}
+
+/** True when a snapshot is stored, without paying to parse it. */
+export function hasStoredSnapshot(): boolean {
+  if (readCookie(STATE_COOKIE) !== null) return true;
+  const chunks = Number(readCookie(STATE_CHUNKS_COOKIE) ?? "0");
+  return Number.isFinite(chunks) && chunks > 0;
+}
+
+/**
+ * The consent answer. A stored snapshot means the student agreed earlier, even
+ * if the consent cookie was since cleared, so it still counts as accepted.
+ */
+export function readConsent(): ConsentDecision | null {
+  const value = readCookie(CONSENT_COOKIE);
+  if (value === "accepted" || value === "declined") return value;
+  if (hasStoredSnapshot()) return "accepted";
+  return null;
+}
+
+export function writeConsent(decision: ConsentDecision): void {
+  if (!safeIsBrowser()) return;
+
+  try {
+    writeCookie(CONSENT_COOKIE, decision);
+    notifyConsent();
+  } catch {
+    // The browser refused the cookie; the caller keeps the previous state.
+  }
+}
+
+export function clearConsent(): void {
+  if (!safeIsBrowser()) return;
+
+  try {
+    deleteCookie(CONSENT_COOKIE);
+    notifyConsent();
+  } catch {
+    // Nothing to do.
+  }
 }
 
 /**
@@ -72,68 +153,41 @@ function mergeConstraints(stored: Partial<Constraints>): Constraints {
   };
 }
 
-export function readConsent(): ConsentDecision | null {
-  if (!safeIsBrowser()) return null;
-
-  try {
-    const escaped = CONSENT_COOKIE.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const match = document.cookie.match(
-      new RegExp(`(?:^|;\\s*)${escaped}=([^;]*)`),
-    );
-    if (!match) return null;
-
-    const value = decodeURIComponent(match[1]).trim();
-    if (value === "accepted" || value === "declined") {
-      return value;
-    }
-    return null;
-  } catch {
-    return null;
-  }
-}
-
-export function writeConsent(decision: ConsentDecision): void {
-  if (!safeIsBrowser()) return;
-
-  try {
-    const isHttps = window.location.protocol === "https:";
-    const secure = isHttps ? "; Secure" : "";
-    const cookieString = `${CONSENT_COOKIE}=${encodeURIComponent(
-      decision,
-    )}; Max-Age=${MAX_AGE_SECONDS}; Path=/; SameSite=Lax${secure}`;
-    document.cookie = cookieString;
-    notifyConsent();
-  } catch {
-    // Ignore cookies disabled / SecurityError
-  }
-}
-
 export function readSnapshot(): PlannerSnapshot | null {
   if (!safeIsBrowser()) return null;
 
   try {
-    const raw = window.localStorage.getItem(STATE_STORAGE_KEY);
-    if (!raw) return null;
+    const chunkCount = Number(readCookie(STATE_CHUNKS_COOKIE) ?? "0");
+    let json: string;
 
-    const parsed = JSON.parse(raw) as Partial<PlannerSnapshot>;
-    if (!parsed || parsed.v !== SNAPSHOT_VERSION) {
-      return null;
+    if (Number.isFinite(chunkCount) && chunkCount > 0) {
+      const parts: string[] = [];
+      for (let index = 1; index <= chunkCount; index += 1) {
+        const part = readCookie(`${STATE_COOKIE}.${index}`);
+        if (part === null) return null;
+        parts.push(part);
+      }
+      json = parts.join("");
+    } else {
+      const raw = readCookie(STATE_COOKIE);
+      if (!raw) return null;
+      json = raw;
     }
 
-    if (!Array.isArray(parsed.programs) || !Array.isArray(parsed.selectedCodes)) {
-      return null;
-    }
-
-    if (!parsed.constraints || typeof parsed.constraints !== "object") {
-      return null;
-    }
-
-    if (!parsed.preferences || typeof parsed.preferences !== "object") {
-      return null;
-    }
+    const parsed = JSON.parse(json) as Partial<PlannerSnapshot>;
+    if (!parsed || parsed.v !== SNAPSHOT_VERSION) return null;
+    if (!Array.isArray(parsed.programs) || !Array.isArray(parsed.selectedCodes)) return null;
+    if (!parsed.constraints || typeof parsed.constraints !== "object") return null;
+    if (!parsed.preferences || typeof parsed.preferences !== "object") return null;
 
     const step = parsed.step;
     const validStep = step === 1 || step === 2 || step === 3 ? step : 1;
+    const sections: Record<string, string> = {};
+    if (parsed.sections && typeof parsed.sections === "object") {
+      for (const [code, section] of Object.entries(parsed.sections)) {
+        if (typeof section === "string" && section.length > 0) sections[code] = section;
+      }
+    }
 
     return {
       v: SNAPSHOT_VERSION,
@@ -145,24 +199,48 @@ export function readSnapshot(): PlannerSnapshot | null {
       constraints: mergeConstraints(parsed.constraints),
       preferences: parsed.preferences as Record<string, CoursePreference>,
       step: validStep,
-      selectedRoutineId:
-        typeof parsed.selectedRoutineId === "string" ? parsed.selectedRoutineId : null,
+      planId: typeof parsed.planId === "string" ? parsed.planId : null,
+      sections,
     };
   } catch {
     return null;
   }
 }
 
-export function writeSnapshot(snapshot: PlannerSnapshot): void {
-  if (!safeIsBrowser()) return;
-
-  // Gate on consent check so we never write without explicit agreement
-  if (readConsent() !== "accepted") return;
+/**
+ * Stores the snapshot in cookies. Returns false when the browser refused, so
+ * the caller can tell the student their details are not being kept.
+ */
+export function writeSnapshot(snapshot: PlannerSnapshot): boolean {
+  if (!safeIsBrowser()) return false;
+  if (readConsent() !== "accepted") return false;
 
   try {
-    window.localStorage.setItem(STATE_STORAGE_KEY, JSON.stringify(snapshot));
+    const json = JSON.stringify(snapshot);
+
+    const previousChunks = Number(readCookie(STATE_CHUNKS_COOKIE) ?? "0");
+    if (Number.isFinite(previousChunks)) {
+      for (let index = 1; index <= previousChunks; index += 1) {
+        deleteCookie(`${STATE_COOKIE}.${index}`);
+      }
+    }
+    deleteCookie(STATE_CHUNKS_COOKIE);
+    deleteCookie(STATE_COOKIE);
+
+    if (json.length <= CHUNK_SIZE) {
+      writeCookie(STATE_COOKIE, json);
+      return true;
+    }
+
+    let count = 0;
+    for (let index = 0; index < json.length; index += CHUNK_SIZE) {
+      count += 1;
+      writeCookie(`${STATE_COOKIE}.${count}`, json.slice(index, index + CHUNK_SIZE));
+    }
+    writeCookie(STATE_CHUNKS_COOKIE, String(count));
+    return true;
   } catch {
-    // QuotaExceededError or private browsing restrictions
+    return false;
   }
 }
 
@@ -170,14 +248,22 @@ export function clearSnapshot(): void {
   if (!safeIsBrowser()) return;
 
   try {
-    window.localStorage.removeItem(STATE_STORAGE_KEY);
+    const chunkCount = Number(readCookie(STATE_CHUNKS_COOKIE) ?? "0");
+    if (Number.isFinite(chunkCount)) {
+      for (let index = 1; index <= chunkCount; index += 1) {
+        deleteCookie(`${STATE_COOKIE}.${index}`);
+      }
+    }
+    deleteCookie(STATE_CHUNKS_COOKIE);
+    deleteCookie(STATE_COOKIE);
   } catch {
-    // Ignore
+    // Nothing to do.
   }
 }
 
 /**
- * Remove stale course codes/preferences if the catalog changed since the snapshot was saved.
+ * Remove stale course codes, sections and preferences if the catalog changed
+ * since the snapshot was saved.
  */
 export function pruneSnapshot(
   snapshot: PlannerSnapshot,
@@ -186,24 +272,27 @@ export function pruneSnapshot(
   const catalogPrograms = new Set<Program>(catalog.programs);
   const catalogCourses = new Map(catalog.courses.map((course) => [course.code, course]));
 
-  const programs = snapshot.programs.filter((p) => catalogPrograms.has(p));
-  const validPrograms = programs.length > 0 ? programs : (catalog.programs.slice(0, 1) as Program[]);
+  const programs = snapshot.programs.filter((program) => catalogPrograms.has(program));
+  const validPrograms =
+    programs.length > 0 ? programs : (catalog.programs.slice(0, 1) as Program[]);
 
   const selectedCodes = snapshot.selectedCodes.filter((code) => catalogCourses.has(code));
   const selectedSet = new Set(selectedCodes);
 
   const preferences: Record<string, CoursePreference> = {};
+  const sections: Record<string, string> = {};
+
   for (const [code, pref] of Object.entries(snapshot.preferences)) {
     if (!selectedSet.has(code)) continue;
 
     const course = catalogCourses.get(code);
     if (!course) continue;
 
-    const validSections = new Set(course.sections.map((s) => s.name));
+    const validSections = new Set(course.sections.map((section) => section.name));
     // The solver matches faculty by name or initials, so keep both.
     const validFaculties = new Set(
-      course.sections.flatMap((s) =>
-        [s.faculty.name, s.faculty.initials].filter(
+      course.sections.flatMap((section) =>
+        [section.faculty.name, section.faculty.initials].filter(
           (value): value is string => typeof value === "string" && value.length > 0,
         ),
       ),
@@ -212,12 +301,24 @@ export function pruneSnapshot(
       (values ?? []).filter((value) => validFaculties.has(value));
 
     preferences[code] = {
-      allowed_sections: (pref.allowed_sections ?? []).filter((s) => validSections.has(s)),
-      excluded_sections: (pref.excluded_sections ?? []).filter((s) => validSections.has(s)),
+      allowed_sections: (pref.allowed_sections ?? []).filter((section) =>
+        validSections.has(section),
+      ),
+      excluded_sections: (pref.excluded_sections ?? []).filter((section) =>
+        validSections.has(section),
+      ),
       preferred_faculty: keepFaculty(pref.preferred_faculty),
       excluded_faculty: keepFaculty(pref.excluded_faculty),
       manual_project: pref.manual_project ?? null,
     };
+  }
+
+  for (const [code, section] of Object.entries(snapshot.sections)) {
+    if (!selectedSet.has(code)) continue;
+    const course = catalogCourses.get(code);
+    if (!course) continue;
+    if (!course.sections.some((option) => option.name === section)) continue;
+    sections[code] = section;
   }
 
   const step = selectedCodes.length === 0 ? 1 : snapshot.step;
@@ -227,6 +328,7 @@ export function pruneSnapshot(
     programs: validPrograms,
     selectedCodes,
     preferences,
+    sections,
     step,
   };
 }
