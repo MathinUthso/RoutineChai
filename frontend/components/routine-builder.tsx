@@ -31,6 +31,7 @@ import {
   getConsentSnapshot,
   getServerConsentSnapshot,
   hasStoredSnapshot,
+  migrateLegacySnapshot,
   pruneSnapshot,
   readSnapshot,
   SNAPSHOT_VERSION,
@@ -168,6 +169,9 @@ export function RoutineBuilder() {
         setCatalogState({ status: "ready", catalog });
 
         if (getConsentSnapshot() === "accepted") {
+          // Carry over anything saved before the move from localStorage to
+          // cookies, so nobody loses the details they already agreed to keep.
+          migrateLegacySnapshot();
           const stored = readSnapshot();
           if (stored) {
             const clean = pruneSnapshot(stored, catalog);

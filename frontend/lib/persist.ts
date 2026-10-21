@@ -9,6 +9,8 @@ import type {
 export const CONSENT_COOKIE = "routinechai.consent";
 export const STATE_COOKIE = "routinechai.state";
 export const STATE_CHUNKS_COOKIE = "routinechai.state.chunks";
+/** Where the first version of this feature kept the snapshot. */
+const LEGACY_STORAGE_KEY = "routinechai.state";
 export const SNAPSHOT_VERSION = 2;
 export const RETENTION_DAYS = 30;
 export const MAX_AGE_SECONDS = RETENTION_DAYS * 24 * 60 * 60;
@@ -204,6 +206,45 @@ export function readSnapshot(): PlannerSnapshot | null {
     };
   } catch {
     return null;
+  }
+}
+
+/**
+ * The first version of this feature kept the snapshot in localStorage under
+ * the same key. A student who agreed before the move to cookies still has
+ * their details there, so carry them over once and clear the old copy.
+ */
+export function migrateLegacySnapshot(): boolean {
+  if (!safeIsBrowser()) return false;
+  if (hasStoredSnapshot()) return false;
+  if (readConsent() !== "accepted") return false;
+
+  try {
+    const raw = window.localStorage.getItem(LEGACY_STORAGE_KEY);
+    if (!raw) return false;
+
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    window.localStorage.removeItem(LEGACY_STORAGE_KEY);
+
+    if (!parsed || parsed.v !== 1) return false;
+    if (!Array.isArray(parsed.selectedCodes) || !parsed.constraints) return false;
+
+    const step = parsed.step;
+    return writeSnapshot({
+      v: SNAPSHOT_VERSION,
+      savedAt: typeof parsed.savedAt === "string" ? parsed.savedAt : new Date().toISOString(),
+      programs: Array.isArray(parsed.programs) ? (parsed.programs as Program[]) : ["BSCSE"],
+      selectedCodes: parsed.selectedCodes.filter(
+        (code): code is string => typeof code === "string",
+      ),
+      constraints: mergeConstraints(parsed.constraints as Partial<Constraints>),
+      preferences: (parsed.preferences ?? {}) as Record<string, CoursePreference>,
+      step: step === 1 || step === 2 || step === 3 ? step : 1,
+      planId: typeof parsed.selectedRoutineId === "string" ? parsed.selectedRoutineId : null,
+      sections: {},
+    });
+  } catch {
+    return false;
   }
 }
 
