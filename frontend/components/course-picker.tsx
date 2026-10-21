@@ -82,8 +82,8 @@ export function CoursePicker({
       </div>
 
       <p className="mt-2 max-w-[58ch] text-[0.9375rem] leading-relaxed text-ink-soft">
-        Every course carries the sections the registrar has already scheduled. More sections give
-        the solver more room to avoid clashes; section and faculty preferences come after this.
+        Courses use the sections listed in the official Fall 2026 routine. More sections give the
+        solver more room to avoid clashes; section and faculty preferences come after this.
       </p>
 
       <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
@@ -163,7 +163,7 @@ export function CoursePicker({
             <div>
               <h3 className="text-[0.9375rem] font-medium text-ink">The catalog didn&rsquo;t load</h3>
               <p className="mt-1 max-w-[46ch] text-[0.875rem] leading-relaxed text-ink-soft">
-                {errorMessage ?? "The registrar service didn't answer. Check the API base URL and try again."}
+                {errorMessage ?? "The course catalog didn't load. Check the API base URL and try again."}
               </p>
               <button
                 type="button"
@@ -192,12 +192,12 @@ export function CoursePicker({
         {status === "ready" && courses.length === 0 && (
           <div className="px-5 py-10">
             <p className="text-[0.9375rem] text-ink">
-              Nothing in the ledger matches{" "}
+              No course matches{" "}
               <span className="font-mono text-[0.875rem] text-ink">{query ? `“${query}”` : programLabel}</span>.
             </p>
             <p className="mt-1.5 max-w-[46ch] text-[0.875rem] leading-relaxed text-ink-soft">
               {query
-                ? `Titles, codes and faculty names are searched. ${totalCourses} courses are on this sheet.`
+                ? `Search covers titles, codes, and faculty names. ${totalCourses} courses available.`
                 : `No course carries the ${programLabel} program tag in this catalog.`}
             </p>
             {query && (
@@ -214,7 +214,7 @@ export function CoursePicker({
       </div>
 
       <p className="mono-label mt-3 text-ink-faint">
-        Section counts are catalog-wide · registrar export, Fall 2026
+        Section counts cover the full Fall 2026 catalog
       </p>
     </section>
   );

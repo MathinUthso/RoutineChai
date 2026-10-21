@@ -16,7 +16,7 @@ const mono = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Fall 2026 Routine · UIU Registrar",
+  title: "Plan classes you won't attend · UIU",
   description:
     "Pick your Fall 2026 courses at United International University and build a conflict-free weekly routine around the hours you cannot attend.",
 };

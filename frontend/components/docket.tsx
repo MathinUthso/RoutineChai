@@ -81,7 +81,7 @@ export function Docket({ selected, catalogSize, busy, onRemove, onClear, onRevie
       <div className="border border-rule bg-paper-raised shadow-sheet">
         <div className="flex items-baseline justify-between gap-3 border-b border-rule px-4 py-3">
           <h2 id="docket-title" className="mono-label text-ink">
-            Draft docket
+            Selected courses
           </h2>
           <div className="flex items-baseline gap-3">
             <span className="mono-label tabular text-ink-faint">
@@ -110,9 +110,9 @@ export function Docket({ selected, catalogSize, busy, onRemove, onClear, onRevie
                 transition={{ duration: reduceMotion ? 0 : 0.16 }}
                 className="border border-dashed border-rule-strong/70 px-3.5 py-5"
               >
-                <p className="text-[0.875rem] text-ink">Your docket is empty.</p>
+                <p className="text-[0.875rem] text-ink">No courses selected yet.</p>
                 <p className="mt-1 text-[0.8125rem] leading-relaxed text-ink-faint">
-                  Pick a course and it lands here, credits and lab sections tallied.
+                  Pick a course and it lands here, with credits and lab sections tallied.
                 </p>
               </motion.div>
             ) : (
@@ -206,7 +206,7 @@ export function Docket({ selected, catalogSize, busy, onRemove, onClear, onRevie
             disabled={empty || busy}
             className="group mt-4 flex w-full items-center justify-between gap-3 bg-green px-4 py-3 text-paper transition-colors duration-[var(--duration-quick)] hover:bg-green-deep focus-visible:outline-2 focus-visible:outline-offset-[3px] focus-visible:outline-coral disabled:cursor-not-allowed disabled:bg-paper-sunk disabled:text-ink-faint"
           >
-            <span className="text-[0.9375rem] font-medium">Review docket</span>
+            <span className="text-[0.9375rem] font-medium">Set constraints</span>
             <ArrowRightIcon className="h-4 w-4 transition-transform duration-[var(--duration-quick)] group-enabled:group-hover:translate-x-0.5" />
           </button>
           <p className="mono-label mt-2 min-h-[1.1rem] leading-relaxed text-ink-faint">

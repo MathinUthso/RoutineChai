@@ -198,7 +198,7 @@ export function ConstraintForm({ value, issues, onChange }: ConstraintFormProps)
         <Clause
           number="01"
           label="Teaching days"
-          hint="The registrar schedules Saturday through Wednesday. At least one day must stay open."
+          hint="Classes run Saturday through Wednesday. At least one day must stay open."
         >
           <fieldset>
             <legend className="sr-only">Allowed teaching days</legend>

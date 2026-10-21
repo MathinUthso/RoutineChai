@@ -41,7 +41,7 @@ export function StepRail({ step, selectedCount, hasResult, onSelect }: StepRailP
 
   return (
     <div className="border-b border-rule bg-paper-raised/60">
-      <nav aria-label="Registration steps" className="mx-auto w-full max-w-[1180px] px-[var(--space-gutter)]">
+      <nav aria-label="Routine planning steps" className="mx-auto w-full max-w-[1180px] px-[var(--space-gutter)]">
         <ol className="grid grid-cols-3">
           {steps.map((item) => {
             const isActive = item.id === step;
