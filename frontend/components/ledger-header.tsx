@@ -1,10 +1,12 @@
 "use client";
 
 import { motion, useReducedMotion } from "framer-motion";
+import { BrandMark } from "./brand-mark";
 import { ImpactVignette } from "./impact-vignette";
 import { MurgiIcon } from "./icons";
 
 const tickerItems = [
+  "routineChai",
   "Fall 2026",
   "Sat–Wed classes",
   "Clash-free routines only",
@@ -19,7 +21,11 @@ function TickerCopy() {
     <div className="flex shrink-0 items-center">
       {tickerItems.map((item) => (
         <span key={item} className="flex items-center">
-          <span className="whitespace-nowrap px-4 font-mono text-[10px] uppercase tracking-[0.16em] text-paper/90 sm:px-6">
+          <span
+            className={`whitespace-nowrap px-4 font-mono text-[10px] uppercase tracking-[0.16em] text-paper/90 sm:px-6 ${
+              item === "routineChai" ? "normal-case tracking-[0.04em]" : ""
+            }`}
+          >
             {item}
           </span>
           <span aria-hidden className="h-1 w-1 shrink-0 rounded-full bg-coral" />
@@ -47,11 +53,16 @@ export function LedgerHeader() {
               initial={reduceMotion ? false : { opacity: 0, rotate: -8, scale: 0.82 }}
               animate={{ opacity: 1, rotate: 0, scale: 1 }}
               transition={{ type: "spring", stiffness: 380, damping: 26, delay: 0.08 }}
-              className="grid h-9 w-9 place-items-center border border-green font-mono text-[11px] font-medium tracking-[0.06em] text-green"
+              className="grid h-9 w-9 place-items-center border border-green text-green"
             >
-              UIU
+              <BrandMark className="h-5 w-5" />
             </motion.span>
-            <p className="mono-label leading-none text-ink-soft">Fall 2026 routine planner</p>
+            <p className="flex flex-wrap items-baseline gap-x-2.5 gap-y-0.5 leading-none">
+              <span className="font-mono text-[0.9375rem] tracking-[-0.01em] text-ink">
+                routineChai
+              </span>
+              <span className="mono-label text-ink-faint">UIU Fall 2026 planner</span>
+            </p>
           </div>
 
           <div className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.13em] text-ink-faint">
@@ -110,7 +121,7 @@ export function LedgerHeader() {
               transition={{ duration: 0.5, delay: 0.4, ease: "easeOut" }}
               className="mt-4 max-w-[32ch]"
             >
-              <p className="mono-label text-ink-faint">Routine planner</p>
+              <p className="mono-label text-ink-faint">UIU routine planner</p>
               <p className="mt-1.5 text-[0.95rem] leading-snug text-ink-soft">
                 Build a clash-free term.
               </p>
@@ -130,8 +141,9 @@ export function LedgerHeader() {
 
       <div className="relative overflow-hidden border-y border-green-deep bg-green-deep text-paper">
         <p className="sr-only">
-          Fall 2026. Classes run Saturday through Wednesday, 8:30 AM to 4:30 PM, Asia/Dhaka. Build
-          clash-free weekly routines around your blocked hours. Built by Murgi.
+          routineChai for UIU Fall 2026. Classes run Saturday through Wednesday, 8:30 AM to 4:30
+          PM, Asia/Dhaka. Build clash-free weekly routines around your blocked hours. Built by
+          Murgi.
         </p>
         <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-10 bg-gradient-to-r from-green-deep to-transparent" />
         <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-10 bg-gradient-to-l from-green-deep to-transparent" />

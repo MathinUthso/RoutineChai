@@ -1,6 +1,6 @@
-# UIU Fall 2026 Smart Routine Generator
+# routineChai — UIU Fall 2026 Routine Planner
 
-Parses the UIU Fall 2026 registrar PDF into a structured catalog, generates ranked weekly routines from student constraints, and serves the result through a FastAPI backend and a Next.js interface.
+Parses the UIU Fall 2026 registrar PDF into a structured catalog, generates ranked weekly routines from student constraints, and serves the result through a FastAPI backend and a Next.js interface. The web app, the Render service (`RoutineChai`), and the Vercel project (`routine-chai`) all ship under the same name.
 
 The registrar week is **Saturday through Wednesday**. Thursday and Friday are weekends.
 

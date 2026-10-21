@@ -17,9 +17,10 @@ const mono = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Plan classes you won't attend · UIU",
+  title: "routineChai · UIU Fall 2026 routine planner",
+  applicationName: "routineChai",
   description:
-    "Pick your Fall 2026 courses at United International University and build a conflict-free weekly routine around the hours you cannot attend.",
+    "routineChai builds clash-free Fall 2026 timetables for UIU students: pick your courses, live-tune gaps, campus days, and class hours, then keep a backup plan for every section.",
 };
 
 export const viewport: Viewport = {
