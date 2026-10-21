@@ -7,12 +7,14 @@ import { durations, panelVariants } from "@/lib/motion";
 import {
   defaultConstraints,
   validateConstraints,
+  validateManualProjects,
 } from "@/lib/schedule";
 import type {
   CatalogResponse,
   Constraints,
   Course,
   CoursePreference,
+  GenerateRequest,
   GenerateResult,
   Program,
 } from "@/lib/types";
@@ -34,6 +36,32 @@ type ResultState =
   | { status: "ready"; result: GenerateResult };
 
 const PROGRAM_OPTIONS: Program[] = ["BSCSE", "BSDS"];
+const PAGE_SIZE = 10;
+
+function requestFor(
+  program: Program,
+  selected: Course[],
+  preferences: Record<string, CoursePreference>,
+  constraints: Constraints,
+  offset: number,
+): GenerateRequest {
+  return {
+    program,
+    courses: selected.map((course) => {
+      const preference = preferences[course.code];
+      return {
+        code: course.code,
+        allowed_sections: preference?.allowed_sections ?? [],
+        preferred_faculty: preference?.preferred_faculty ?? [],
+        excluded_faculty: preference?.excluded_faculty ?? [],
+        manual_project: preference?.manual_project ?? null,
+      };
+    }),
+    constraints,
+    limit: PAGE_SIZE,
+    offset,
+  };
+}
 
 function matchesQuery(course: Course, query: string) {
   const needle = query.trim().toLowerCase();
@@ -68,6 +96,10 @@ export function RoutineBuilder() {
   const [preferences, setPreferences] = useState<Record<string, CoursePreference>>({});
   const [resultState, setResultState] = useState<ResultState>({ status: "idle" });
   const [selectedRoutineId, setSelectedRoutineId] = useState<string | null>(null);
+  const [page, setPage] = useState(0);
+  const [pageLoading, setPageLoading] = useState(false);
+  const [pageError, setPageError] = useState<{ page: number; message: string } | null>(null);
+  const [lastRequest, setLastRequest] = useState<GenerateRequest | null>(null);
 
   const panelRef = useRef<HTMLDivElement>(null);
   const stepHeadingRef = useRef<HTMLHeadingElement>(null);
@@ -130,11 +162,19 @@ export function RoutineBuilder() {
 
   const selectedSet = useMemo(() => new Set(selectedCodes), [selectedCodes]);
   const issues = useMemo(() => validateConstraints(constraints), [constraints]);
+  const preferenceIssues = useMemo(
+    () => validateManualProjects(selected, preferences),
+    [preferences, selected],
+  );
 
   const invalidateResult = () => {
     requestRef.current?.abort();
     setResultState({ status: "idle" });
     setSelectedRoutineId(null);
+    setPage(0);
+    setPageLoading(false);
+    setPageError(null);
+    setLastRequest(null);
   };
 
   const handleProgramChange = (next: string) => {
@@ -187,34 +227,30 @@ export function RoutineBuilder() {
   };
 
   const handleGenerate = async () => {
-    if (!catalog || selected.length === 0 || issues.length > 0) return;
+    if (
+      !catalog ||
+      selected.length === 0 ||
+      issues.length > 0 ||
+      preferenceIssues.length > 0
+    ) {
+      return;
+    }
 
     requestRef.current?.abort();
     const controller = new AbortController();
     requestRef.current = controller;
+    const request = requestFor(program, selected, preferences, constraints, 0);
 
+    setLastRequest(request);
+    setPage(0);
+    setPageLoading(false);
+    setPageError(null);
     setResultState({ status: "loading" });
     setSelectedRoutineId(null);
     setStep(3);
 
     try {
-      const result = await generateRoutines(
-        {
-          program,
-          courses: selected.map((course) => {
-            const preference = preferences[course.code];
-            return {
-              code: course.code,
-              allowed_sections: preference?.allowed_sections ?? [],
-              preferred_faculty: preference?.preferred_faculty ?? [],
-              excluded_faculty: preference?.excluded_faculty ?? [],
-            };
-          }),
-          constraints,
-          limit: 10,
-        },
-        controller.signal,
-      );
+      const result = await generateRoutines(request, controller.signal);
 
       if (controller.signal.aborted) return;
       setResultState({ status: "ready", result });
@@ -227,6 +263,50 @@ export function RoutineBuilder() {
         return;
       }
       setResultState({ status: "error", message: errorMessage(error) });
+    }
+  };
+
+  const handlePageChange = async (nextPage: number) => {
+    if (
+      !lastRequest ||
+      nextPage < 0 ||
+      pageLoading ||
+      (nextPage === page && !pageError)
+    ) {
+      return;
+    }
+
+    requestRef.current?.abort();
+    const controller = new AbortController();
+    requestRef.current = controller;
+
+    setPageLoading(true);
+    setPageError(null);
+
+    try {
+      const result = await generateRoutines(
+        { ...lastRequest, offset: nextPage * PAGE_SIZE },
+        controller.signal,
+      );
+
+      if (controller.signal.aborted) return;
+      if (result.routines.length === 0 && result.total > 0) {
+        setPageError({ page: nextPage, message: "No routines exist at this page offset." });
+        return;
+      }
+      setResultState({ status: "ready", result });
+      setPage(nextPage);
+      setSelectedRoutineId(result.routines[0]?.id ?? null);
+    } catch (error) {
+      if (
+        controller.signal.aborted ||
+        (error instanceof DOMException && error.name === "AbortError")
+      ) {
+        return;
+      }
+      setPageError({ page: nextPage, message: errorMessage(error) });
+    } finally {
+      if (!controller.signal.aborted) setPageLoading(false);
     }
   };
 
@@ -309,6 +389,7 @@ export function RoutineBuilder() {
                   selected={selected}
                   constraints={constraints}
                   issues={issues}
+                  preferenceIssues={preferenceIssues}
                   preferences={preferences}
                   program={program}
                   status={resultState.status === "loading" ? "loading" : resultState.status === "error" ? "error" : "idle"}
@@ -338,10 +419,14 @@ export function RoutineBuilder() {
                   result={resultState.status === "ready" ? resultState.result : undefined}
                   error={resultState.status === "error" ? resultState.message : undefined}
                   selectedId={selectedRoutineId}
+                  page={page}
+                  pageLoading={pageLoading}
+                  pageError={pageError}
                   headingRef={stepHeadingRef}
                   onSelect={setSelectedRoutineId}
                   onBack={() => setStep(2)}
                   onRetry={handleGenerate}
+                  onPageChange={handlePageChange}
                 />
               </motion.div>
             )}

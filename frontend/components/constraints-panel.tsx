@@ -1,6 +1,10 @@
 "use client";
 
-import { describeConstraints, type ConstraintIssue } from "@/lib/schedule";
+import {
+  describeConstraints,
+  type ConstraintIssue,
+  type PreferenceIssue,
+} from "@/lib/schedule";
 import type { Constraints, Course, CoursePreference, Program } from "@/lib/types";
 import { ConstraintForm } from "./constraint-form";
 import { SectionPreferences } from "./section-preferences";
@@ -10,6 +14,7 @@ type ConstraintsPanelProps = {
   selected: Course[];
   constraints: Constraints;
   issues: ConstraintIssue[];
+  preferenceIssues: PreferenceIssue[];
   preferences: Record<string, CoursePreference>;
   /** Program selected in Step 01. */
   program: Program;
@@ -27,6 +32,7 @@ export function ConstraintsPanel({
   selected,
   constraints,
   issues,
+  preferenceIssues,
   preferences,
   program,
   status,
@@ -47,20 +53,21 @@ export function ConstraintsPanel({
   const overload = totalCredits > 18;
   const partTime = totalCredits > 0 && totalCredits < 12;
   const busy = status === "loading";
-  const disabled = selected.length === 0 || issues.length > 0 || busy;
+  const issueCount = issues.length + preferenceIssues.length;
+  const disabled = selected.length === 0 || issueCount > 0 || busy;
 
   const hint = (() => {
-    if (busy) return "Consulting the solver — the sheet will open on Step 03.";
+    if (busy) return "Running the solver — results will appear in Step 03.";
     if (selected.length === 0) return "Select at least one course in Step 01.";
-    if (issues.length > 0) {
-      return `Resolve ${issues.length} open ${issues.length === 1 ? "item" : "items"} before the sheet can be issued.`;
+    if (issueCount > 0) {
+      return `Resolve ${issueCount} open ${issueCount === 1 ? "item" : "items"} before generating routines.`;
     }
     if (excluded.length > 0) {
-      return `Up to 10 options · issued for ${requestProgram}; ${excluded.length} selected ${
+      return `Pages of 10 routines · generated for ${requestProgram}; ${excluded.length} selected ${
         excluded.length === 1 ? "course is" : "courses are"
       } not offered.`;
     }
-    return `Up to 10 options · issued for ${requestProgram}`;
+    return `Pages of 10 routines · generated for ${requestProgram}`;
   })();
 
   return (
@@ -125,7 +132,7 @@ export function ConstraintsPanel({
         <aside className="space-y-4 lg:sticky lg:top-6 lg:self-start">
           <div className="border border-rule bg-paper-raised shadow-sheet">
             <div className="flex items-baseline justify-between gap-3 border-b border-rule px-4 py-3">
-              <h3 className="mono-label text-ink">Docket under review</h3>
+              <h3 className="mono-label text-ink">Your selection</h3>
               <span className="mono-label tabular text-ink-faint">
                 {String(selected.length).padStart(2, "0")} selected
               </span>
@@ -171,7 +178,7 @@ export function ConstraintsPanel({
                 <p className="mono-label mt-3 flex items-start gap-2 leading-relaxed text-coral-ink">
                   <AlertIcon className="mt-px h-3 w-3 shrink-0" />
                   {overload
-                    ? "Above the 18.0 credit band — registrar approval required."
+                    ? "Above the 18.0 credit band — double-check your load."
                     : "Below the 12.0 full-time band — the routine will be part-time."}
                 </p>
               )}
@@ -191,9 +198,9 @@ export function ConstraintsPanel({
 
           <div className="border border-rule bg-paper-raised">
             <div className="flex items-baseline justify-between gap-3 border-b border-rule px-4 py-3">
-              <h3 className="mono-label text-ink">Reading of the sheet</h3>
+              <h3 className="mono-label text-ink">Constraint summary</h3>
               <span className="mono-label tabular text-ink-faint">
-                {String(reading.length).padStart(2, "0")} clauses
+                {String(reading.length).padStart(2, "0")} rules
               </span>
             </div>
             <dl className="divide-y divide-rule/80 px-4">
@@ -214,15 +221,26 @@ export function ConstraintsPanel({
             </p>
           </div>
 
-          {issues.length > 0 && (
+          {issueCount > 0 && (
             <div role="alert" className="border border-coral/60 bg-paper px-4 py-3">
-              <p className="mono-label text-coral-ink">Before the sheet is issued</p>
+              <p className="mono-label text-coral-ink">Before you generate</p>
               <ul className="mt-2 space-y-1.5">
                 {issues.map((issue, index) => (
                   <li
                     key={`${issue.field}-${issue.index ?? "all"}-${index}`}
                     className="text-[0.8125rem] leading-snug text-ink-soft"
                   >
+                    {issue.message}
+                  </li>
+                ))}
+                {preferenceIssues.map((issue, index) => (
+                  <li
+                    key={`manual-${issue.code}-${index}`}
+                    className="text-[0.8125rem] leading-snug text-ink-soft"
+                  >
+                    <span className="font-mono text-[0.6875rem] tracking-[0.03em] text-ink-faint">
+                      {issue.code}
+                    </span>{" "}
                     {issue.message}
                   </li>
                 ))}
@@ -246,7 +264,7 @@ export function ConstraintsPanel({
             <p
               aria-live="polite"
               className={`mono-label mt-2 min-h-[1.1rem] leading-relaxed ${
-                issues.length > 0 || excluded.length > 0 ? "text-coral-ink" : "text-ink-faint"
+                issueCount > 0 || excluded.length > 0 ? "text-coral-ink" : "text-ink-faint"
               }`}
             >
               {hint}
