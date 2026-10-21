@@ -85,7 +85,13 @@ Open `http://localhost:3000`.
 
 If the frontend runs on a different origin, add it to the backend's comma-separated `ALLOWED_ORIGINS` environment variable.
 
-The UI is a three-step flow: **Courses → Constraints → Timetable**. Programs are a multi-select (BSCSE default, BSDS and BSEEE optional), so a student can combine courses from more than one program. The results step shows numbered server-backed pages of 10 ranked routines, a Sat–Wed week grid, section/faculty details, and score breakdowns. Each routine can be downloaded as a weekly Google Calendar `.ics` file.
+The UI is a three-step flow: **Courses → Constraints → Timetable**. Programs are a multi-select (BSCSE default, BSDS and BSEEE optional), so a student can combine courses from more than one program. The results step shows server-backed pages of 10 ranked plans, a Sat–Wed week grid, section/faculty details, and score breakdowns. Each plan can be downloaded as a weekly Google Calendar `.ics` file.
+
+The timetable step is built for fast section picking:
+
+- **Live constraints** — four sliders (longest single gap, latest end time, campus days, classes per day) re-rank the plans on the server as they move; the previous list stays on screen while the solver works.
+- **Plans and backups** — every ranked routine is one complete section combination, labelled `Plan A`, `Plan B`, `Plan C`, and so on. The rest of the list is the backup ladder, and paging walks the remaining combinations.
+- **Section board** — for the open plan, every catalog section of every course is listed as *current*, *ready to swap*, *conditional*, *conflict*, or *marked full*. Swapping one section re-scores the plan server-side; marking a section full removes it from the solver and re-ranks the remaining combinations, which is how a student falls back from Plan A to Plan B when the registrar fills a section.
 
 ## Data Pipeline
 
@@ -144,6 +150,7 @@ Always verify the generated schedule against the official registrar notice befor
   "courses": [
     { "code": "CSE 1111" },
     { "code": "CSE 1112", "allowed_sections": ["F"] },
+    { "code": "CSE 2213", "excluded_sections": ["A"] },
     { "code": "MATH 1151", "preferred_faculty": ["MTR"], "excluded_faculty": ["AR"] },
     {
       "code": "CSE 4000A",
@@ -160,7 +167,10 @@ Always verify the generated schedule against the official registrar notice befor
     "max_sessions_per_day": 3,
     "allowed_days": ["Sat", "Sun", "Tue", "Wed"],
     "time_preference": "morning",
-    "preferred_off_days": ["Mon"]
+    "preferred_off_days": ["Mon"],
+    "max_gap_minutes": 90,
+    "max_campus_days": 4,
+    "latest_end": "15:00"
   },
   "limit": 10,
   "offset": 0
@@ -183,7 +193,12 @@ A feasible request returns HTTP 200 with ranked `routines`, `total`, `offset`, `
 - Course must be offered to at least one selected program.
 - Conditional (`if_required`) sections are excluded unless explicitly allowed.
 - Sections taught by `excluded_faculty` are removed, even when pinned.
+- Sections named in `excluded_sections` are removed, even when pinned.
+- No meeting may end after `latest_end`.
+- A plan may not contain a single idle gap longer than `max_gap_minutes`, and may not span more than `max_campus_days` teaching days.
 - Manual project meetings replace the catalog sections and still obey clash, day, session-cap, and faculty-exclusion rules.
+
+`max_gap_minutes`, `max_campus_days`, and `latest_end` are optional; omitting them means no cap. The timetable step drives them from the live sliders, and `excluded_sections` from the section board's *mark full* action.
 
 ### Soft constraints
 

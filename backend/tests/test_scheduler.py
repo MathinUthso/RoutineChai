@@ -4,9 +4,11 @@ Schema under test (see ``tests/fixtures/*.json``):
   catalog: term / programs / generated_at / source / courses
   course:  code / title / credits / programs / kind / sections
   section: name / if_required / faculty{name,initials} / meetings[{day,start,end,room}]
-  request: programs / courses[{code,allowed_sections?,preferred_faculty?,excluded_faculty?}] /
+  request: programs / courses[{code,allowed_sections?,excluded_sections?,
+                                preferred_faculty?,excluded_faculty?}] /
            constraints{blocked,max_sessions_per_day,allowed_days,
-                       time_preference,preferred_off_days} / limit
+                       time_preference,preferred_off_days,
+                       max_gap_minutes?,max_campus_days?,latest_end?} / limit
 
 Every expected value below is derived from the fixture catalog or from the
 scheduler contract, never from the implementation.

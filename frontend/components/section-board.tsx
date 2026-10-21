@@ -26,7 +26,7 @@ type SectionBoardProps = {
 
 const LEGEND = [
   ["Current", "border-green bg-green text-paper"],
-  ["Ready", "border-rule bg-paper text-ink"],
+  ["Ready", "border-green/60 bg-green-tint/40 text-ink"],
   ["Conditional", "border-dashed border-coral/60 bg-paper text-coral-ink"],
   ["Conflict", "border-rule/60 bg-paper-sunk text-ink-faint"],
   ["Full", "border-coral/50 bg-coral-tint/40 text-coral-ink line-through"],
@@ -40,18 +40,18 @@ function statusClass(status: string, marking: boolean) {
   }
   if (status === "ready") {
     return marking
-      ? "border-coral/50 bg-paper text-ink hover:border-coral hover:bg-coral-tint/35"
-      : "border-rule bg-paper text-ink hover:border-green hover:bg-green-tint/45";
+      ? "border-coral/60 bg-paper text-ink hover:border-coral hover:bg-coral-tint/35"
+      : "border-green/60 bg-green-tint/35 text-ink hover:border-green hover:bg-green-tint/70";
   }
   if (status === "conditional") {
     return marking
       ? "border-dashed border-coral/60 bg-paper text-ink hover:bg-coral-tint/35"
-      : "border-dashed border-coral/60 bg-paper text-coral-ink hover:border-coral hover:bg-coral-tint/30";
+      : "border-dashed border-coral/70 bg-coral-tint/25 text-coral-ink hover:border-coral hover:bg-coral-tint/45";
   }
   if (status === "excluded") {
     return "border-coral/55 bg-coral-tint/40 text-coral-ink line-through hover:border-coral";
   }
-  return "cursor-not-allowed border-rule/60 bg-paper-sunk text-ink-faint";
+  return "cursor-not-allowed border-rule/50 bg-paper-sunk text-ink-faint";
 }
 
 function optionLabel(
@@ -82,6 +82,7 @@ export function SectionBoard({
   onRestore,
 }: SectionBoardProps) {
   const [marking, setMarking] = useState(false);
+  const [onlyReady, setOnlyReady] = useState(false);
   const slotMinutes = catalogSlotMinutes(catalog);
   const busy = pending !== null;
 
@@ -97,18 +98,32 @@ export function SectionBoard({
             section, mark it full and the solver re-ranks every remaining combination.
           </p>
         </div>
-        <button
-          type="button"
-          aria-pressed={marking}
-          onClick={() => setMarking((value) => !value)}
-          className={`press mono-label inline-flex min-h-9 items-center border px-2.5 ${
-            marking
-              ? "border-coral bg-coral text-paper hover:bg-coral-ink"
-              : "border-rule-strong text-ink hover:border-coral hover:text-coral-ink"
-          }`}
-        >
-          {marking ? "Marking full" : "Mark full"}
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            aria-pressed={onlyReady}
+            onClick={() => setOnlyReady((value) => !value)}
+            className={`press mono-label inline-flex min-h-9 items-center border px-2.5 ${
+              onlyReady
+                ? "border-green bg-green-tint/60 text-green-deep"
+                : "border-rule-strong text-ink hover:border-ink hover:bg-paper"
+            }`}
+          >
+            Ready only
+          </button>
+          <button
+            type="button"
+            aria-pressed={marking}
+            onClick={() => setMarking((value) => !value)}
+            className={`press mono-label inline-flex min-h-9 items-center border px-2.5 ${
+              marking
+                ? "border-coral bg-coral text-paper hover:bg-coral-ink"
+                : "border-rule-strong text-ink hover:border-coral hover:text-coral-ink"
+            }`}
+          >
+            {marking ? "Marking full" : "Mark full"}
+          </button>
+        </div>
       </div>
 
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 border-y border-rule/70 bg-paper/40 px-5 py-2">
@@ -178,14 +193,19 @@ export function SectionBoard({
                       : `${readyCount} ${readyCount === 1 ? "swap" : "swaps"} ready`}
                   </span>
                   {!routineCourse.manual && (
-                    <button
-                      type="button"
-                      disabled={busy}
-                      onClick={() => onMarkFull(routineCourse.code, routineCourse.section)}
-                      className="cue-underline mono-label text-coral-ink disabled:opacity-50"
-                    >
-                      Current full
-                    </button>
+                    <>
+                      <span aria-hidden className="mono-label text-ink-faint/50">
+                        ·
+                      </span>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => onMarkFull(routineCourse.code, routineCourse.section)}
+                        className="cue-underline mono-label text-coral-ink disabled:opacity-50"
+                      >
+                        Mark current full
+                      </button>
+                    </>
                   )}
                 </div>
               </div>
@@ -201,50 +221,69 @@ export function SectionBoard({
                 </p>
               ) : (
                 <div className="mt-2.5 flex flex-wrap gap-1.5">
-                  {options.map(({ section, status, reason }) => {
-                    const isPending =
-                      pending?.code === routineCourse.code && pending.section === section.name;
-                    const interactive =
-                      status === "current"
-                        ? marking
-                        : status === "excluded" || status === "ready" || status === "conditional";
-                    return (
-                      <button
-                        key={section.name}
-                        type="button"
-                        disabled={!interactive || busy}
-                        aria-label={optionLabel(routineCourse, section.name, status, marking, reason)}
-                        title={
-                          reason ??
-                          section.meetings.map(formatMeeting).join(" · ") ??
-                          "No meeting time listed"
-                        }
-                        onClick={() => {
-                          if (status === "excluded") {
-                            onRestore(routineCourse.code, section.name);
-                          } else if (marking) {
-                            onMarkFull(routineCourse.code, section.name);
-                          } else if (status === "ready" || status === "conditional") {
-                            onSwap(routineCourse.code, section.name);
+                  {options
+                    .filter(
+                      (option) =>
+                        !onlyReady ||
+                        option.status === "ready" ||
+                        option.status === "conditional" ||
+                        option.status === "current" ||
+                        option.status === "excluded",
+                    )
+                    .map(({ section, status, reason }) => {
+                      const isPending =
+                        pending?.code === routineCourse.code && pending.section === section.name;
+                      const interactive =
+                        status === "current"
+                          ? marking
+                          : status === "excluded" ||
+                            status === "ready" ||
+                            status === "conditional";
+                      return (
+                        <button
+                          key={section.name}
+                          type="button"
+                          disabled={!interactive || busy}
+                          aria-label={optionLabel(routineCourse, section.name, status, marking, reason)}
+                          title={
+                            reason ??
+                            section.meetings.map(formatMeeting).join(" · ") ??
+                            "No meeting time listed"
                           }
-                        }}
-                        className={`press relative flex min-h-10 min-w-[3.4rem] flex-col items-start justify-center border px-2 py-1 text-left transition-colors ${statusClass(
-                          status,
-                          marking,
-                        )} ${isPending ? "animate-pulse" : ""}`}
-                      >
-                        <span className="flex items-baseline gap-1 font-mono text-[0.72rem]">
-                          {section.name}
-                          {section.if_required && (
-                            <span className="text-[0.5rem] tracking-[0.08em] opacity-75">cond.</span>
-                          )}
-                        </span>
-                        <span className="font-mono text-[0.56rem] tabular opacity-75">
-                          {isPending ? "checking" : sectionSummary(section)}
-                        </span>
-                      </button>
-                    );
-                  })}
+                          onClick={() => {
+                            if (status === "excluded") {
+                              onRestore(routineCourse.code, section.name);
+                            } else if (marking) {
+                              onMarkFull(routineCourse.code, section.name);
+                            } else if (status === "ready" || status === "conditional") {
+                              onSwap(routineCourse.code, section.name);
+                            }
+                          }}
+                          className={`press relative flex min-h-10 min-w-[3.4rem] flex-col items-start justify-center border px-2 py-1 text-left transition-colors ${statusClass(
+                            status,
+                            marking,
+                          )} ${isPending ? "animate-pulse" : ""}`}
+                        >
+                          <span className="flex items-baseline gap-1 font-mono text-[0.72rem]">
+                            {status === "ready" && (
+                              <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-green" />
+                            )}
+                            {(status === "clash" || status === "filtered") && (
+                              <span aria-hidden className="text-[0.6rem] leading-none text-coral-ink/60">
+                                ×
+                              </span>
+                            )}
+                            {section.name}
+                            {section.if_required && (
+                              <span className="text-[0.5rem] tracking-[0.08em] opacity-75">cond.</span>
+                            )}
+                          </span>
+                          <span className="font-mono text-[0.56rem] tabular opacity-75">
+                            {isPending ? "checking" : sectionSummary(section)}
+                          </span>
+                        </button>
+                      );
+                    })}
                 </div>
               )}
             </div>

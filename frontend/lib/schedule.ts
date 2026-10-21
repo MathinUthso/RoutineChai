@@ -246,6 +246,21 @@ export function describeConstraints(constraints: Constraints): {
         ? `${blocked[0].day} ${formatTimeRange(blocked[0].start, blocked[0].end)}`
         : `${blocked.length} windows`;
 
+  const live: string[] = [];
+  if (constraints.max_gap_minutes !== null) {
+    live.push(
+      constraints.max_gap_minutes === 0
+        ? "No gaps"
+        : `Gap ≤ ${formatGap(constraints.max_gap_minutes)}`,
+    );
+  }
+  if (constraints.max_campus_days !== null) {
+    live.push(`${constraints.max_campus_days} days`);
+  }
+  if (constraints.latest_end !== null) {
+    live.push(`Ends by ${formatTime(constraints.latest_end)}`);
+  }
+
   return [
     {
       label: "Teaching days",
@@ -270,5 +285,6 @@ export function describeConstraints(constraints: Constraints): {
           : formatDayList(constraints.preferred_off_days),
     },
     { label: "Blocked", value: blockedSummary },
+    { label: "Live rules", value: live.length === 0 ? "None" : live.join(" · ") },
   ];
 }

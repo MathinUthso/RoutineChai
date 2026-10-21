@@ -358,6 +358,8 @@ export function RoutineBuilder() {
       setLastRequest(request);
       setLiveBusy(true);
       setLiveError(null);
+      setPageLoading(false);
+      setPageError(null);
       setCustomRoutine(null);
       setSwapError(null);
 
@@ -388,9 +390,13 @@ export function RoutineBuilder() {
     nextPreferences: Record<string, CoursePreference>,
   ) => {
     requestRef.current?.abort();
+    swapRef.current?.abort();
     if (liveTimerRef.current !== null) window.clearTimeout(liveTimerRef.current);
     setLiveBusy(true);
     setLiveError(null);
+    setPageLoading(false);
+    setPageError(null);
+    setPendingSwap(null);
     liveTimerRef.current = window.setTimeout(() => {
       liveTimerRef.current = null;
       void runLive(nextConstraints, nextPreferences);
