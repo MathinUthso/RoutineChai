@@ -1,0 +1,57 @@
+# Product
+
+<!-- impeccable:product-schema 1 -->
+
+## Platform
+
+web
+
+## Users
+
+UIU students planning their own Fall 2026 registration. They arrive with a set of courses in mind, limited hours they can attend, and a need to leave with a weekly routine they can actually follow.
+
+## Product Purpose
+
+Turn the official Fall 2026 registrar schedule into ranked, clash-free weekly routines. Success means a student can choose sections, state the hours and preferences that matter, page through every valid routine, and leave with a schedule that is valid, understandable, and ready to verify against the registrar notice.
+
+## Positioning
+
+The differentiator is the ranked solver, not a course catalog. The product enforces hard scheduling constraints first, then ranks the remaining routines by student preferences, so a neighboring course browser could not truthfully make the same promise.
+
+## Operating Context
+
+Students work from the registrar PDF and the generated catalog. The teaching week is Saturday through Wednesday; Thursday and Friday are weekends. Classes run in the registrar's time slots, and conditional sections are excluded unless explicitly pinned. Every generated routine must be checked against the official registrar notice before registration.
+
+## Capabilities and Constraints
+
+- Browse and search the Fall 2026 catalog for BSCSE and BSDS, with course, section, faculty, room, and meeting details.
+- Select courses, pin allowed sections, prefer or exclude faculty, block time windows, cap sessions per day, choose allowed days, and set morning/afternoon, compactness, off-day, and preferred-faculty preferences.
+- Return numbered server-backed pages of 10 ranked routines with a Sat–Wed weekly grid, section/faculty details, readable 12-hour time cues, and score breakdowns.
+- Let students enter a project section and one weekly meeting for `CSE 4000A` or `DS 4000A`; the manual slot replaces catalog sections, inherits official faculty when the section matches, and participates in clash checks.
+- Export every meeting in a routine as a weekly recurring `.ics` calendar, starting at the next occurrence and marked for registrar verification.
+- Hard constraints: exactly one section per selected course, no overlapping meetings, blocked windows excluded, allowed teaching days only, session caps, program eligibility, conditional sections excluded unless explicitly allowed, and excluded faculty removed even when a section is pinned. Manual project meetings obey the same checks.
+- Conditional (`if_required`) sections stay hidden by default and are considered only when explicitly pinned.
+- Results are deterministic for the same catalog and request. Infeasible requests return an empty routine list with diagnostics; invalid payloads and unknown courses are rejected.
+- Never invent courses, sections, faculty, rooms, or meeting times. The catalog is generated from the official PDF and carries known data caveats.
+
+## Brand Commitments
+
+- Official UIU identity and the supplied UIU campus illustration are binding; preserve UIU attribution. The header uses three cropped building bands and deliberately excludes the character throw, blast, debris, and bounding frame.
+- The catalog and its derived facts come from the official registrar PDF. Generated artifacts are not hand-edited.
+
+## Evidence on Hand
+
+- `doc/Class Routine with faculty assign Fall 2026.pdf` — source registrar PDF.
+- `backend/app/data/routine.json` — generated catalog: 791 rows, 303 repairs, 0 skips, 101 courses, 791 sections, 1,296 meetings.
+- `backend/app/data/parse_report.json` — extraction report with three known warnings: SL 436 truncated faculty/credit line, SL 723 missing room (`TBA`), SL 750 missing faculty (`TBA`).
+- `frontend/public/assets/uiu-buildings.webp` — cropped, transparent-sky UIU campus illustration used by the header.
+- `assets/uiu.svg` — supplied UIU campus illustration source.
+- The supplied throw and blast Lottie files are not used by the current header.
+
+## Product Principles
+
+1. **Validity before preference.** A routine that violates a hard constraint is not a candidate, no matter how well it scores.
+2. **Show the work.** Rank, score, section choice, and warnings stay visible so the student can judge the result rather than trust a black box.
+3. **The registrar is the source of truth.** Derived schedules are a planning aid; the official notice is the final check.
+4. **Respect the student's real week.** Blocked hours, campus days, session load, and travel time are first-class constraints.
+5. **Motion is decoration.** The scheduling flow stays usable and understandable without animation, and reduced-motion preferences are honored.

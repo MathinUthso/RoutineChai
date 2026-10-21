@@ -85,7 +85,7 @@ Open `http://localhost:3000`.
 
 If the frontend runs on a different origin, add it to the backend's comma-separated `ALLOWED_ORIGINS` environment variable.
 
-The UI is a three-step flow: **Courses → Constraints → Timetable**. The results step shows the top 10 ranked routines, a Sat–Wed week grid, section/faculty details, and score breakdowns.
+The UI is a three-step flow: **Courses → Constraints → Timetable**. The results step shows numbered server-backed pages of 10 ranked routines, a Sat–Wed week grid, section/faculty details, and score breakdowns. Each routine can be downloaded as a weekly Google Calendar `.ics` file.
 
 ## Data Pipeline
 
@@ -141,7 +141,16 @@ Always verify the generated schedule against the official registrar notice befor
   "courses": [
     { "code": "CSE 1111" },
     { "code": "CSE 1112", "allowed_sections": ["F"] },
-    { "code": "MATH 1151", "preferred_faculty": ["MTR"], "excluded_faculty": ["AR"] }
+    { "code": "MATH 1151", "preferred_faculty": ["MTR"], "excluded_faculty": ["AR"] },
+    {
+      "code": "CSE 4000A",
+      "manual_project": {
+        "section": "A",
+        "day": "Sat",
+        "start": "09:00",
+        "end": "11:00"
+      }
+    }
   ],
   "constraints": {
     "blocked": [{ "day": "Mon", "start": "08:30", "end": "11:10" }],
@@ -150,11 +159,14 @@ Always verify the generated schedule against the official registrar notice befor
     "time_preference": "morning",
     "preferred_off_days": ["Mon"]
   },
-  "limit": 10
+  "limit": 10,
+  "offset": 0
 }
 ```
 
-A feasible request returns HTTP 200 with ranked `routines` and a `truncated` flag. An infeasible request also returns HTTP 200, with `routines: []` and `diagnostics`; invalid payloads and unknown courses return HTTP 422.
+A feasible request returns HTTP 200 with ranked `routines`, `total`, `offset`, `limit`, `truncated`, and `total_is_partial`. `truncated` means more routines exist beyond this page; `total_is_partial` means the solver hit its search cap and `total` is a lower bound. An infeasible request also returns HTTP 200, with `routines: []` and `diagnostics`; invalid payloads and unknown courses return HTTP 422.
+
+`manual_project` is limited to `CSE 4000A` and `DS 4000A`. It replaces the registrar sections for that course with one student-entered weekly meeting, inherits the official faculty when the section matches the catalog, uses `TBA` otherwise, and participates in clash and exclusion checks. Room is always `TBA`.
 
 ### Hard constraints
 
@@ -166,6 +178,7 @@ A feasible request returns HTTP 200 with ranked `routines` and a `truncated` fla
 - Course must be offered to the selected program.
 - Conditional (`if_required`) sections are excluded unless explicitly allowed.
 - Sections taught by `excluded_faculty` are removed, even when pinned.
+- Manual project meetings replace the catalog sections and still obey clash, day, session-cap, and faculty-exclusion rules.
 
 ### Soft constraints
 
@@ -177,7 +190,9 @@ The scheduler ranks valid routines by weighted preferences for:
 - Fewer campus days.
 - Preferred off days.
 
-`limit` accepts 1–50. Results are deterministic for the same catalog and request.
+`limit` accepts 1–50 and `offset` selects the server-side page. Results are deterministic for the same catalog and request.
+
+The timetable export is a single `.ics` file with one weekly recurring event per meeting (16 occurrences) starting at the next occurrence. Times are emitted in UTC for Asia/Dhaka (UTC+06:00). Verify term dates and holidays with the registrar before relying on the calendar.
 
 ## Project Layout
 
