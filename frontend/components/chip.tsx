@@ -34,7 +34,7 @@ export function Chip({
       title={title}
       disabled={disabled}
       onClick={onClick}
-      className={`inline-flex min-h-11 items-center gap-1.5 border px-3 font-mono text-[0.75rem] uppercase tracking-[0.08em] leading-none transition-colors duration-[var(--duration-quick)] ${
+      className={`press inline-flex min-h-11 items-center gap-1.5 border px-3 font-mono text-[0.75rem] uppercase tracking-[0.08em] leading-none ${
         pressed
           ? pressedTone
           : "border-rule bg-paper text-ink-soft hover:border-ink hover:text-ink"

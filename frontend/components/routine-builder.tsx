@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { generateRoutines, getCatalog } from "@/lib/api";
 import { durations, panelVariants } from "@/lib/motion";
 import {
   defaultConstraints,
+  emptyPreference,
   validateConstraints,
   validateManualProjects,
 } from "@/lib/schedule";
@@ -17,6 +18,7 @@ import type {
   GenerateRequest,
   GenerateResult,
   Program,
+  Routine,
 } from "@/lib/types";
 import { ConstraintsPanel } from "./constraints-panel";
 import { CoursePicker } from "./course-picker";
@@ -35,23 +37,25 @@ type ResultState =
   | { status: "error"; message: string }
   | { status: "ready"; result: GenerateResult };
 
-const PROGRAM_OPTIONS: Program[] = ["BSCSE", "BSDS"];
 const PAGE_SIZE = 10;
+/** Debounce for live refinements; the solver needs a moment to re-rank. */
+const LIVE_DEBOUNCE_MS = 320;
 
 function requestFor(
-  program: Program,
+  programs: Program[],
   selected: Course[],
   preferences: Record<string, CoursePreference>,
   constraints: Constraints,
   offset: number,
 ): GenerateRequest {
   return {
-    program,
+    programs,
     courses: selected.map((course) => {
       const preference = preferences[course.code];
       return {
         code: course.code,
         allowed_sections: preference?.allowed_sections ?? [],
+        excluded_sections: preference?.excluded_sections ?? [],
         preferred_faculty: preference?.preferred_faculty ?? [],
         excluded_faculty: preference?.excluded_faculty ?? [],
         manual_project: preference?.manual_project ?? null,
@@ -89,7 +93,7 @@ export function RoutineBuilder() {
   const [catalogState, setCatalogState] = useState<CatalogState>({ status: "loading" });
   const [attempt, setAttempt] = useState(0);
   const [step, setStep] = useState<1 | 2 | 3>(1);
-  const [program, setProgram] = useState<Program>("BSCSE");
+  const [programs, setPrograms] = useState<Program[]>(["BSCSE"]);
   const [query, setQuery] = useState("");
   const [selectedCodes, setSelectedCodes] = useState<string[]>([]);
   const [constraints, setConstraints] = useState<Constraints>(() => defaultConstraints());
@@ -100,10 +104,17 @@ export function RoutineBuilder() {
   const [pageLoading, setPageLoading] = useState(false);
   const [pageError, setPageError] = useState<{ page: number; message: string } | null>(null);
   const [lastRequest, setLastRequest] = useState<GenerateRequest | null>(null);
+  const [customRoutine, setCustomRoutine] = useState<Routine | null>(null);
+  const [liveBusy, setLiveBusy] = useState(false);
+  const [liveError, setLiveError] = useState<string | null>(null);
+  const [pendingSwap, setPendingSwap] = useState<{ code: string; section: string } | null>(null);
+  const [swapError, setSwapError] = useState<string | null>(null);
 
   const panelRef = useRef<HTMLDivElement>(null);
   const stepHeadingRef = useRef<HTMLHeadingElement>(null);
   const requestRef = useRef<AbortController | null>(null);
+  const swapRef = useRef<AbortController | null>(null);
+  const liveTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -119,7 +130,11 @@ export function RoutineBuilder() {
   }, [attempt]);
 
   useEffect(() => {
-    return () => requestRef.current?.abort();
+    return () => {
+      requestRef.current?.abort();
+      swapRef.current?.abort();
+      if (liveTimerRef.current !== null) window.clearTimeout(liveTimerRef.current);
+    };
   }, []);
 
   useEffect(() => {
@@ -138,20 +153,23 @@ export function RoutineBuilder() {
   const catalog = catalogState.status === "ready" ? catalogState.catalog : null;
 
   const counts = useMemo<Record<string, number>>(() => {
-    if (!catalog) return { BSCSE: 0, BSDS: 0 };
-    return {
-      BSCSE: catalog.courses.filter((course) => course.programs.includes("BSCSE")).length,
-      BSDS: catalog.courses.filter((course) => course.programs.includes("BSDS")).length,
-    };
+    if (!catalog) return {};
+    return Object.fromEntries(
+      catalog.programs.map((program) => [
+        program,
+        catalog.courses.filter((course) => course.programs.includes(program)).length,
+      ]),
+    );
   }, [catalog]);
 
   const visibleCourses = useMemo(() => {
     if (!catalog) return [];
     return catalog.courses.filter(
       (course) =>
-        course.programs.includes(program) && matchesQuery(course, query),
+        course.programs.some((program) => programs.includes(program)) &&
+        matchesQuery(course, query),
     );
-  }, [catalog, program, query]);
+  }, [catalog, programs, query]);
 
   const selected = useMemo(() => {
     if (!catalog) return [];
@@ -169,26 +187,39 @@ export function RoutineBuilder() {
 
   const invalidateResult = () => {
     requestRef.current?.abort();
+    if (liveTimerRef.current !== null) {
+      window.clearTimeout(liveTimerRef.current);
+      liveTimerRef.current = null;
+    }
     setResultState({ status: "idle" });
     setSelectedRoutineId(null);
     setPage(0);
     setPageLoading(false);
     setPageError(null);
     setLastRequest(null);
+    setCustomRoutine(null);
+    setLiveBusy(false);
+    setLiveError(null);
+    setSwapError(null);
+    setPendingSwap(null);
   };
 
-  const handleProgramChange = (next: string) => {
-    const nextProgram: Program = next === "BSDS" ? "BSDS" : "BSCSE";
-    if (nextProgram === program) return;
+  const handleProgramChange = (next: Program[]) => {
+    if (!catalog) return;
 
-    setProgram(nextProgram);
+    const nextPrograms = catalog.programs.filter((option) => next.includes(option));
+    const unchanged =
+      nextPrograms.length === programs.length &&
+      nextPrograms.every((option, index) => option === programs[index]);
+    if (nextPrograms.length === 0 || unchanged) return;
+
+    setPrograms(nextPrograms);
     setStep(1);
     invalidateResult();
 
-    if (!catalog) return;
     const offered = new Set(
       catalog.courses
-        .filter((course) => course.programs.includes(nextProgram))
+        .filter((course) => course.programs.some((option) => nextPrograms.includes(option)))
         .map((course) => course.code),
     );
     setSelectedCodes((current) => current.filter((code) => offered.has(code)));
@@ -239,7 +270,7 @@ export function RoutineBuilder() {
     requestRef.current?.abort();
     const controller = new AbortController();
     requestRef.current = controller;
-    const request = requestFor(program, selected, preferences, constraints, 0);
+    const request = requestFor(programs, selected, preferences, constraints, 0);
 
     setLastRequest(request);
     setPage(0);
@@ -247,6 +278,9 @@ export function RoutineBuilder() {
     setPageError(null);
     setResultState({ status: "loading" });
     setSelectedRoutineId(null);
+    setCustomRoutine(null);
+    setLiveError(null);
+    setSwapError(null);
     setStep(3);
 
     try {
@@ -297,6 +331,7 @@ export function RoutineBuilder() {
       setResultState({ status: "ready", result });
       setPage(nextPage);
       setSelectedRoutineId(result.routines[0]?.id ?? null);
+      setCustomRoutine(null);
     } catch (error) {
       if (
         controller.signal.aborted ||
@@ -308,6 +343,158 @@ export function RoutineBuilder() {
     } finally {
       if (!controller.signal.aborted) setPageLoading(false);
     }
+  };
+
+  const runLive = useCallback(
+    async (
+      nextConstraints: Constraints,
+      nextPreferences: Record<string, CoursePreference>,
+    ) => {
+      requestRef.current?.abort();
+      const controller = new AbortController();
+      requestRef.current = controller;
+      const request = requestFor(programs, selected, nextPreferences, nextConstraints, 0);
+
+      setLastRequest(request);
+      setLiveBusy(true);
+      setLiveError(null);
+      setCustomRoutine(null);
+      setSwapError(null);
+
+      try {
+        const result = await generateRoutines(request, controller.signal);
+        if (controller.signal.aborted) return;
+        setResultState({ status: "ready", result });
+        setPage(0);
+        setPageError(null);
+        setSelectedRoutineId(result.routines[0]?.id ?? null);
+      } catch (error) {
+        if (
+          controller.signal.aborted ||
+          (error instanceof DOMException && error.name === "AbortError")
+        ) {
+          return;
+        }
+        setLiveError(errorMessage(error));
+      } finally {
+        if (!controller.signal.aborted) setLiveBusy(false);
+      }
+    },
+    [programs, selected],
+  );
+
+  const scheduleLive = (
+    nextConstraints: Constraints,
+    nextPreferences: Record<string, CoursePreference>,
+  ) => {
+    requestRef.current?.abort();
+    if (liveTimerRef.current !== null) window.clearTimeout(liveTimerRef.current);
+    setLiveBusy(true);
+    setLiveError(null);
+    liveTimerRef.current = window.setTimeout(() => {
+      liveTimerRef.current = null;
+      void runLive(nextConstraints, nextPreferences);
+    }, LIVE_DEBOUNCE_MS);
+  };
+
+  const handleLiveConstraints = (next: Constraints) => {
+    setConstraints(next);
+    scheduleLive(next, preferences);
+  };
+
+  const handleMarkFull = (code: string, section: string) => {
+    const preference = preferences[code] ?? emptyPreference();
+    if (preference.excluded_sections.includes(section)) return;
+
+    const nextPreferences: Record<string, CoursePreference> = {
+      ...preferences,
+      [code]: {
+        ...preference,
+        excluded_sections: [...preference.excluded_sections, section],
+        allowed_sections: preference.allowed_sections.filter((item) => item !== section),
+      },
+    };
+    setPreferences(nextPreferences);
+    scheduleLive(constraints, nextPreferences);
+  };
+
+  const handleRestoreSection = (code: string, section: string) => {
+    const preference = preferences[code] ?? emptyPreference();
+    if (!preference.excluded_sections.includes(section)) return;
+
+    const nextPreferences: Record<string, CoursePreference> = {
+      ...preferences,
+      [code]: {
+        ...preference,
+        excluded_sections: preference.excluded_sections.filter((item) => item !== section),
+      },
+    };
+    setPreferences(nextPreferences);
+    scheduleLive(constraints, nextPreferences);
+  };
+
+  const handleSwap = async (code: string, section: string) => {
+    const base =
+      customRoutine ??
+      (resultState.status === "ready"
+        ? (resultState.result.routines.find((routine) => routine.id === selectedRoutineId) ??
+          resultState.result.routines[0])
+        : undefined);
+    if (!base) return;
+
+    swapRef.current?.abort();
+    const controller = new AbortController();
+    swapRef.current = controller;
+
+    setPendingSwap({ code, section });
+    setSwapError(null);
+
+    const assignments = new Map(base.courses.map((course) => [course.code, course.section]));
+    assignments.set(code, section);
+    const request = requestFor(programs, selected, preferences, constraints, 0);
+    const pinnedRequest: GenerateRequest = {
+      ...request,
+      courses: base.courses.map((course) => ({
+        code: course.code,
+        allowed_sections: [assignments.get(course.code) ?? course.section],
+        excluded_sections: [],
+        preferred_faculty: preferences[course.code]?.preferred_faculty ?? [],
+        excluded_faculty: preferences[course.code]?.excluded_faculty ?? [],
+        manual_project: preferences[course.code]?.manual_project ?? null,
+      })),
+      limit: 1,
+      offset: 0,
+    };
+
+    try {
+      const result = await generateRoutines(pinnedRequest, controller.signal);
+      if (controller.signal.aborted) return;
+      const routine = result.routines[0];
+      if (!routine) {
+        setSwapError(
+          result.diagnostics[0]?.message ?? "That swap leaves no valid timetable.",
+        );
+        return;
+      }
+      setCustomRoutine(routine);
+      setSelectedRoutineId(null);
+    } catch (error) {
+      if (
+        controller.signal.aborted ||
+        (error instanceof DOMException && error.name === "AbortError")
+      ) {
+        return;
+      }
+      setSwapError(errorMessage(error));
+    } finally {
+      if (!controller.signal.aborted) setPendingSwap(null);
+    }
+  };
+
+  const handleSelect = (id: string) => {
+    setCustomRoutine(null);
+    setSwapError(null);
+    setSelectedRoutineId(id);
   };
 
   const resultStatus =
@@ -347,8 +534,8 @@ export function RoutineBuilder() {
                   courses={visibleCourses}
                   totalCourses={catalog?.courses.length ?? 0}
                   query={query}
-                  program={program}
-                  programs={PROGRAM_OPTIONS}
+                  values={programs}
+                  programs={catalog?.programs ?? programs}
                   counts={counts}
                   selectedCodes={selectedSet}
                   onQueryChange={setQuery}
@@ -391,7 +578,7 @@ export function RoutineBuilder() {
                   issues={issues}
                   preferenceIssues={preferenceIssues}
                   preferences={preferences}
-                  program={program}
+                  programs={programs}
                   status={resultState.status === "loading" ? "loading" : resultState.status === "error" ? "error" : "idle"}
                   error={resultState.status === "error" ? resultState.message : undefined}
                   headingRef={stepHeadingRef}
@@ -423,7 +610,23 @@ export function RoutineBuilder() {
                   pageLoading={pageLoading}
                   pageError={pageError}
                   headingRef={stepHeadingRef}
-                  onSelect={setSelectedRoutineId}
+                  constraints={constraints}
+                  catalog={catalog}
+                  preferences={preferences}
+                  customRoutine={customRoutine}
+                  liveBusy={liveBusy}
+                  liveError={liveError}
+                  pendingSwap={pendingSwap}
+                  swapError={swapError}
+                  onConstraintsChange={handleLiveConstraints}
+                  onSelect={handleSelect}
+                  onSwap={handleSwap}
+                  onMarkFull={handleMarkFull}
+                  onRestoreSection={handleRestoreSection}
+                  onClearCustom={() => {
+                    setCustomRoutine(null);
+                    setSwapError(null);
+                  }}
                   onBack={() => setStep(2)}
                   onRetry={handleGenerate}
                   onPageChange={handlePageChange}

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { spring } from "@/lib/motion";
-import { LockIcon } from "./icons";
+import { CheckIcon, LockIcon } from "./icons";
 
 type StepId = 1 | 2 | 3;
 
@@ -56,7 +56,7 @@ export function StepRail({ step, selectedCount, hasResult, onSelect }: StepRailP
                   aria-current={isActive ? "step" : undefined}
                   aria-disabled={isLocked || undefined}
                   onClick={() => handleSelect(item.id)}
-                  className="group flex w-full flex-col gap-1 px-3 py-3.5 text-left first:pl-0 sm:flex-row sm:items-baseline sm:gap-3 sm:px-4 sm:py-4"
+                  className="group press relative flex w-full flex-col gap-1 px-3 py-3.5 text-left first:pl-0 sm:flex-row sm:items-baseline sm:gap-3 sm:px-4 sm:py-4"
                 >
                   <span
                     className={`mono-label tabular flex items-center gap-1.5 transition-colors duration-[var(--duration-quick)] ${
@@ -81,9 +81,26 @@ export function StepRail({ step, selectedCount, hasResult, onSelect }: StepRailP
                         isActive ? "text-green" : isLocked ? "text-ink-faint" : "text-ink-faint"
                       }`}
                     >
-                      {isActive ? "In progress" : isComplete ? "Complete" : isLocked ? "Locked" : "Open"}
+                      {isActive ? (
+                        "In progress"
+                      ) : isComplete ? (
+                        <span className="inline-flex items-center gap-1">
+                          <CheckIcon className="h-2.5 w-2.5" />
+                          Complete
+                        </span>
+                      ) : isLocked ? (
+                        "Locked"
+                      ) : (
+                        "Open"
+                      )}
                     </span>
                   </span>
+                  <span
+                    aria-hidden
+                    className={`absolute inset-x-0 bottom-0 h-[2px] origin-left bg-green transition-transform duration-[var(--duration-base)] ease-[var(--ease-ledger)] ${
+                      isActive ? "scale-x-100" : "scale-x-0 group-hover:scale-x-100"
+                    }`}
+                  />
                 </button>
               </li>
             );
@@ -102,10 +119,11 @@ export function StepRail({ step, selectedCount, hasResult, onSelect }: StepRailP
         <p
           role="status"
           aria-live="polite"
-          className={`mono-label min-h-[1.75rem] pt-2 leading-relaxed ${
+          className={`mono-label flex min-h-[1.75rem] items-center gap-1.5 pt-2 leading-relaxed ${
             activeHint ? "text-coral-ink" : "text-ink-faint"
           }`}
         >
+          {activeHint && <span aria-hidden className="h-1 w-1 shrink-0 rounded-full bg-coral" />}
           {activeHint}
         </p>
       </nav>

@@ -2,6 +2,7 @@
 
 import {
   describeConstraints,
+  formatProgramList,
   type ConstraintIssue,
   type PreferenceIssue,
 } from "@/lib/schedule";
@@ -16,8 +17,8 @@ type ConstraintsPanelProps = {
   issues: ConstraintIssue[];
   preferenceIssues: PreferenceIssue[];
   preferences: Record<string, CoursePreference>;
-  /** Program selected in Step 01. */
-  program: Program;
+  /** Programs selected in Step 01. */
+  programs: Program[];
   status: "idle" | "loading" | "error";
   error?: string;
   headingRef?: React.RefObject<HTMLHeadingElement | null>;
@@ -34,7 +35,7 @@ export function ConstraintsPanel({
   issues,
   preferenceIssues,
   preferences,
-  program,
+  programs,
   status,
   error,
   headingRef,
@@ -47,8 +48,10 @@ export function ConstraintsPanel({
   const totalCredits = selected.reduce((sum, course) => sum + course.credits, 0);
   const labs = selected.filter((course) => course.kind === "lab").length;
   const sections = selected.reduce((sum, course) => sum + course.sections.length, 0);
-  const requestProgram: Program = program === "BSDS" ? "BSDS" : "BSCSE";
-  const excluded = selected.filter((course) => !course.programs.includes(requestProgram));
+  const programLabel = formatProgramList(programs);
+  const excluded = selected.filter(
+    (course) => !course.programs.some((option) => programs.includes(option)),
+  );
   const reading = describeConstraints(constraints);
   const overload = totalCredits > 18;
   const partTime = totalCredits > 0 && totalCredits < 12;
@@ -63,11 +66,11 @@ export function ConstraintsPanel({
       return `Resolve ${issueCount} open ${issueCount === 1 ? "item" : "items"} before generating routines.`;
     }
     if (excluded.length > 0) {
-      return `Pages of 10 routines · generated for ${requestProgram}; ${excluded.length} selected ${
+      return `Pages of 10 routines · generated for ${programLabel}; ${excluded.length} selected ${
         excluded.length === 1 ? "course is" : "courses are"
       } not offered.`;
     }
-    return `Pages of 10 routines · generated for ${requestProgram}`;
+    return `Pages of 10 routines · generated for ${programLabel}`;
   })();
 
   return (
@@ -110,7 +113,7 @@ export function ConstraintsPanel({
             <button
               type="button"
               onClick={onRetry}
-              className="mono-label mt-3 inline-flex min-h-11 items-center border border-ink px-3 text-ink transition-colors hover:bg-ink hover:text-paper"
+              className="press mono-label mt-3 inline-flex min-h-11 items-center border border-ink px-3 text-ink hover:bg-ink hover:text-paper"
             >
               Try again
             </button>
@@ -184,13 +187,13 @@ export function ConstraintsPanel({
               )}
 
               <p className="mono-label mt-3 border-t border-rule pt-2.5 leading-relaxed text-ink-faint">
-                Timetable program · <span className="text-ink">{requestProgram}</span>
+                Timetable programs · <span className="text-ink">{programLabel}</span>
               </p>
 
               {excluded.length > 0 && (
                 <p className="mono-label mt-2 flex items-start gap-2 leading-relaxed text-coral-ink">
                   <AlertIcon className="mt-px h-3 w-3 shrink-0" />
-                  Not offered to {requestProgram}; these will be set aside.
+                  Not offered to {programLabel}; these will be set aside.
                 </p>
               )}
             </div>
@@ -254,7 +257,7 @@ export function ConstraintsPanel({
               onClick={onGenerate}
               disabled={disabled}
               aria-busy={busy || undefined}
-              className="group flex min-h-11 w-full items-center justify-between gap-3 bg-green px-4 py-3 text-paper transition-colors duration-[var(--duration-quick)] hover:bg-green-deep focus-visible:outline-2 focus-visible:outline-offset-[3px] focus-visible:outline-coral disabled:cursor-not-allowed disabled:bg-paper-sunk disabled:text-ink-faint"
+              className="press group flex min-h-11 w-full items-center justify-between gap-3 bg-green px-4 py-3 text-paper hover:bg-green-deep focus-visible:outline-2 focus-visible:outline-offset-[3px] focus-visible:outline-coral disabled:cursor-not-allowed disabled:bg-paper-sunk disabled:text-ink-faint"
             >
               <span className="text-[0.9375rem] font-medium">
                 {busy ? "Consulting the solver…" : "Generate timetable"}
@@ -273,7 +276,7 @@ export function ConstraintsPanel({
             <button
               type="button"
               onClick={onBack}
-              className="group mt-1 inline-flex min-h-11 items-center gap-2 text-[0.875rem] text-ink-soft transition-colors hover:text-ink"
+              className="press group mt-1 inline-flex min-h-11 items-center gap-2 text-[0.875rem] text-ink-soft hover:text-ink"
             >
               <ArrowLeftIcon className="h-4 w-4 text-ink-faint transition-transform duration-[var(--duration-quick)] group-hover:-translate-x-0.5" />
               Back to courses

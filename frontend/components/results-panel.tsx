@@ -4,13 +4,19 @@ import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { buildRoutineCalendar, calendarFilename } from "@/lib/calendar";
 import { durations, panelVariants } from "@/lib/motion";
 import { formatGap, formatMeeting, formatTimeRange } from "@/lib/schedule";
+import { catalogSlotMinutes, longestGapMinutes, planLabel } from "@/lib/section-plan";
 import type {
+  CatalogResponse,
+  Constraints,
+  CoursePreference,
   Diagnostics,
   GenerateResult,
   Routine,
   ScoreBreakdown,
 } from "@/lib/types";
 import { ArrowLeftIcon, ArrowRightIcon, CalendarIcon } from "./icons";
+import { LiveRefine } from "./live-refine";
+import { SectionBoard } from "./section-board";
 import { WeeklyCalendar } from "./weekly-calendar";
 
 type ResultStatus = "idle" | "loading" | "error" | "ready";
@@ -24,7 +30,20 @@ type ResultsPanelProps = {
   pageLoading: boolean;
   pageError: { page: number; message: string } | null;
   headingRef?: React.RefObject<HTMLHeadingElement | null>;
+  constraints: Constraints;
+  catalog: CatalogResponse | null;
+  preferences: Record<string, CoursePreference>;
+  customRoutine: Routine | null;
+  liveBusy: boolean;
+  liveError: string | null;
+  pendingSwap: { code: string; section: string } | null;
+  swapError: string | null;
+  onConstraintsChange: (next: Constraints) => void;
   onSelect: (id: string) => void;
+  onSwap: (code: string, section: string) => void;
+  onMarkFull: (code: string, section: string) => void;
+  onRestoreSection: (code: string, section: string) => void;
+  onClearCustom: () => void;
   onBack: () => void;
   onRetry: () => void;
   onPageChange: (page: number) => void;
@@ -134,7 +153,7 @@ function EmptyResult({
           <button
             type="button"
             onClick={onBack}
-            className="inline-flex min-h-11 items-center gap-2 bg-green px-4 text-[0.9375rem] text-paper transition-colors hover:bg-green-deep"
+            className="press inline-flex min-h-11 items-center gap-2 bg-green px-4 text-[0.9375rem] text-paper hover:bg-green-deep"
           >
             Adjust constraints
             <ArrowRightIcon className="h-4 w-4" />
@@ -146,9 +165,11 @@ function EmptyResult({
 }
 
 function Breakdown({ routine }: { routine: Routine }) {
+  const reduceMotion = useReducedMotion();
+
   return (
     <dl className="mt-4 grid gap-x-6 gap-y-3 sm:grid-cols-2">
-      {BREAKDOWN_LABELS.map(({ key, label }) => {
+      {BREAKDOWN_LABELS.map(({ key, label }, index) => {
         const value = Math.max(0, Math.min(100, routine.breakdown[key]));
         return (
           <div key={key}>
@@ -159,8 +180,18 @@ function Breakdown({ routine }: { routine: Routine }) {
               </dd>
             </div>
             <div className="mt-1 h-[5px] overflow-hidden bg-paper-sunk" aria-hidden>
-              <div
-                className={`h-full ${value >= 70 ? "bg-green" : value >= 40 ? "bg-rule-strong" : "bg-coral"}`}
+              <motion.div
+                key={`${routine.id}-${key}`}
+                className={`h-full origin-left ${
+                  value >= 70 ? "bg-green" : value >= 40 ? "bg-rule-strong" : "bg-coral"
+                }`}
+                initial={reduceMotion ? false : { scaleX: 0 }}
+                animate={{ scaleX: 1 }}
+                transition={{
+                  duration: reduceMotion ? 0 : 0.34,
+                  delay: reduceMotion ? 0 : index * 0.045,
+                  ease: [0.2, 0.7, 0.2, 1],
+                }}
                 style={{ width: `${value}%` }}
               />
             </div>
@@ -185,12 +216,39 @@ function downloadCalendar(routine: Routine) {
   window.setTimeout(() => URL.revokeObjectURL(href), 1000);
 }
 
-function RoutineDetail({ routine }: { routine: Routine }) {
+function RoutineDetail({
+  routine,
+  planName,
+  catalog,
+  constraints,
+  preferences,
+  pendingSwap,
+  swapError,
+  onSwap,
+  onMarkFull,
+  onRestoreSection,
+}: {
+  routine: Routine;
+  planName: string;
+  catalog: CatalogResponse | null;
+  constraints: Constraints;
+  preferences: Record<string, CoursePreference>;
+  pendingSwap: { code: string; section: string } | null;
+  swapError: string | null;
+  onSwap: (code: string, section: string) => void;
+  onMarkFull: (code: string, section: string) => void;
+  onRestoreSection: (code: string, section: string) => void;
+}) {
+  const longestGap = longestGapMinutes(
+    routine.courses.flatMap((course) => course.meetings),
+    catalogSlotMinutes(catalog),
+  );
+
   return (
     <div className="border border-rule bg-paper-raised shadow-sheet">
       <div className="flex flex-wrap items-start justify-between gap-4 border-b border-rule px-5 py-4">
         <div>
-          <p className="mono-label text-ink-faint">Selected routine</p>
+          <p className="mono-label text-ink-faint">{planName}</p>
           <h3 className="mt-1 text-[1.2rem] font-medium tracking-[-0.01em] text-ink">
             Your timetable
           </h3>
@@ -210,7 +268,7 @@ function RoutineDetail({ routine }: { routine: Routine }) {
             type="button"
             onClick={() => downloadCalendar(routine)}
             title="Download every class as a weekly .ics from the next occurrence. Verify dates before relying on it."
-            className="inline-flex min-h-9 items-center gap-1.5 border border-rule-strong px-2.5 font-mono text-[0.625rem] uppercase tracking-[0.12em] text-ink transition-colors hover:border-ink hover:bg-paper focus-visible:border-ink"
+            className="press inline-flex min-h-9 items-center gap-1.5 border border-rule-strong px-2.5 font-mono text-[0.625rem] uppercase tracking-[0.12em] text-ink hover:border-ink hover:bg-paper focus-visible:border-ink"
           >
             <CalendarIcon className="h-3.5 w-3.5" />
             Google Calendar
@@ -223,18 +281,28 @@ function RoutineDetail({ routine }: { routine: Routine }) {
         and holidays before relying on it.
       </p>
 
-      <div className="grid grid-cols-3 divide-x divide-rule border-b border-rule">
+      <div className="grid grid-cols-2 divide-x divide-y divide-rule border-b border-rule sm:grid-cols-4 sm:divide-y-0">
         {[
-          ["Credits", routine.stats.total_credits.toFixed(1)],
-          ["Gaps", formatGap(routine.stats.gap_minutes)],
-          [
-            "Span",
-            routine.stats.earliest && routine.stats.latest
-              ? formatTimeRange(routine.stats.earliest, routine.stats.latest)
-              : "—",
-          ],
-        ].map(([label, value]) => (
-          <div key={label} className="px-4 py-3">
+          { label: "Credits", value: routine.stats.total_credits.toFixed(1) },
+          {
+            label: "Idle gaps",
+            value: formatGap(routine.stats.gap_minutes),
+            title: "Idle time between classes, counted only when it lasts a full class slot or more.",
+          },
+          {
+            label: "Longest gap",
+            value: formatGap(longestGap),
+            title: "The longest single break on any teaching day.",
+          },
+          {
+            label: "Span",
+            value:
+              routine.stats.earliest && routine.stats.latest
+                ? formatTimeRange(routine.stats.earliest, routine.stats.latest)
+                : "—",
+          },
+        ].map(({ label, value, title }) => (
+          <div key={label} className="px-4 py-3" title={title}>
             <p className="mono-label text-ink-faint">{label}</p>
             <p className="mt-1 font-mono text-[0.95rem] tabular text-ink">{value}</p>
           </div>
@@ -313,6 +381,18 @@ function RoutineDetail({ routine }: { routine: Routine }) {
           </table>
         </div>
       </div>
+
+      <SectionBoard
+        routine={routine}
+        catalog={catalog}
+        constraints={constraints}
+        preferences={preferences}
+        pending={pendingSwap}
+        error={swapError}
+        onSwap={onSwap}
+        onMarkFull={onMarkFull}
+        onRestore={onRestoreSection}
+      />
     </div>
   );
 }
@@ -326,14 +406,34 @@ export function ResultsPanel({
   pageLoading,
   pageError,
   headingRef,
+  constraints,
+  catalog,
+  preferences,
+  customRoutine,
+  liveBusy,
+  liveError,
+  pendingSwap,
+  swapError,
+  onConstraintsChange,
   onSelect,
+  onSwap,
+  onMarkFull,
+  onRestoreSection,
+  onClearCustom,
   onBack,
   onRetry,
   onPageChange,
 }: ResultsPanelProps) {
   const reduceMotion = useReducedMotion();
   const routines = result?.routines ?? [];
-  const selected = routines.find((routine) => routine.id === selectedId) ?? routines[0];
+  const rankedSelected = routines.find((routine) => routine.id === selectedId) ?? routines[0];
+  const selected = customRoutine ?? rankedSelected;
+  const selectedRank = routines.findIndex((routine) => routine.id === rankedSelected?.id);
+  const planName = customRoutine
+    ? "Working plan"
+    : selectedRank >= 0 && result
+      ? planLabel(result.offset + selectedRank)
+      : "Plan";
   const pageCount = result ? Math.max(1, Math.ceil(result.total / result.limit)) : 1;
   const totalLabel = result ? `${result.total}${result.total_is_partial ? "+" : ""}` : "0";
   const rangeLabel =
@@ -352,8 +452,12 @@ export function ResultsPanel({
             tabIndex={-1}
             className="mt-1.5 text-title font-medium tracking-[-0.015em] focus:outline-none"
           >
-            Ranked routines
+            Plans &amp; backups
           </h2>
+          <p className="mt-2 max-w-[62ch] text-[0.875rem] leading-relaxed text-ink-soft">
+            Every plan is one complete section combination. Plan A is the strongest; the rest are
+            your backups, ready when a section fills up.
+          </p>
         </div>
         <p className="mono-label tabular text-ink-faint" aria-live="polite">
           {status === "loading"
@@ -363,6 +467,15 @@ export function ResultsPanel({
               : "Awaiting a request"}
         </p>
       </div>
+
+      {status === "ready" && (
+        <LiveRefine
+          constraints={constraints}
+          busy={liveBusy || pageLoading}
+          error={liveError}
+          onChange={onConstraintsChange}
+        />
+      )}
 
       {status === "loading" && (
         <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,21rem)_minmax(0,1fr)]" aria-busy>
@@ -387,14 +500,14 @@ export function ResultsPanel({
             <button
               type="button"
               onClick={onRetry}
-              className="inline-flex min-h-11 items-center border border-ink px-4 text-[0.9375rem] text-ink transition-colors hover:bg-ink hover:text-paper"
+              className="press inline-flex min-h-11 items-center border border-ink px-4 text-[0.9375rem] text-ink hover:bg-ink hover:text-paper"
             >
               Try again
             </button>
             <button
               type="button"
               onClick={onBack}
-              className="inline-flex min-h-11 items-center gap-2 px-1 text-[0.9375rem] text-ink-soft hover:text-ink"
+              className="press inline-flex min-h-11 items-center gap-2 px-1 text-[0.9375rem] text-ink-soft hover:text-ink"
             >
               <ArrowLeftIcon className="h-4 w-4" />
               Back to constraints
@@ -413,18 +526,48 @@ export function ResultsPanel({
 
           <p className="sr-only" aria-live="polite">
             {selected
-              ? `Showing routine ${selected.id}, score ${selected.score.toFixed(1)} of 100, ${selected.courses.length} courses.`
+              ? `Showing ${planName}, score ${selected.score.toFixed(1)} of 100, ${selected.courses.length} courses.`
               : ""}
           </p>
 
           <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,21rem)_minmax(0,1fr)] lg:items-start">
             <div>
               <div className="flex items-baseline justify-between gap-3 border-y border-rule py-2">
-                <h3 className="mono-label text-ink">Ranked options</h3>
+                <h3 className="mono-label text-ink">Plans, best first</h3>
                 <span className="mono-label tabular text-ink-faint" aria-live="polite">
                   {pageLoading ? "Loading page…" : rangeLabel}
                 </span>
               </div>
+
+              {customRoutine && (
+                <div className="mt-2 border border-green bg-green-tint/45 px-4 py-3">
+                  <div className="flex items-baseline justify-between gap-3">
+                    <span className="mono-label text-green-deep">Working plan</span>
+                    <span
+                      className={`font-mono text-[1.15rem] leading-none tabular ${scoreTone(
+                        customRoutine.score,
+                      )}`}
+                    >
+                      {customRoutine.score.toFixed(1)}
+                    </span>
+                  </div>
+                  <span className="mt-2 flex flex-wrap gap-x-2 gap-y-0.5">
+                    {customRoutine.courses.map((course) => (
+                      <span key={course.code} className="font-mono text-[0.65rem] text-ink-soft">
+                        {course.code}
+                        <span className="text-green-deep"> · {course.section}</span>
+                      </span>
+                    ))}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={onClearCustom}
+                    className="cue-underline mono-label mt-2 text-ink-soft hover:text-ink"
+                  >
+                    Back to ranked plans
+                  </button>
+                </div>
+              )}
 
               <ol
                 className={`mt-2 space-y-2 transition-opacity duration-[var(--duration-quick)] ${
@@ -433,7 +576,8 @@ export function ResultsPanel({
                 aria-busy={pageLoading}
               >
                 {routines.map((routine, index) => {
-                  const active = routine.id === selected?.id;
+                  const active = !customRoutine && routine.id === rankedSelected?.id;
+                  const label = planLabel(result.offset + index);
                   return (
                     <li key={routine.id}>
                       <motion.button
@@ -447,15 +591,24 @@ export function ResultsPanel({
                             ? { duration: 0 }
                             : { delay: Math.min(index * 0.035, 0.2), duration: 0.2 }
                         }
-                        className={`w-full border px-4 py-3 text-left transition-colors duration-[var(--duration-quick)] ${
+                        className={`group relative w-full border px-4 py-3 text-left transition-colors duration-[var(--duration-quick)] ${
                           active
                             ? "border-green bg-green-tint/45"
                             : "border-rule bg-paper-raised hover:border-rule-strong"
                         }`}
                       >
+                        <span
+                          aria-hidden
+                          className={`absolute inset-y-0 left-0 w-[2px] origin-top bg-green transition-transform duration-[var(--duration-base)] ease-[var(--ease-ledger)] ${
+                            active ? "scale-y-100" : "scale-y-0 group-hover:scale-y-100"
+                          }`}
+                        />
                         <span className="flex items-baseline justify-between gap-3">
                           <span className="mono-label text-ink-faint">
-                            Rank {String(result.offset + index + 1).padStart(2, "0")}
+                            {label}
+                            {result.offset + index > 0 && (
+                              <span className="ml-2 text-ink-faint/70">backup</span>
+                            )}
                           </span>
                           <span className={`font-mono text-[1.15rem] leading-none tabular ${scoreTone(routine.score)}`}>
                             {routine.score.toFixed(1)}
@@ -463,13 +616,16 @@ export function ResultsPanel({
                         </span>
                         <span className="mono-label mt-2 flex flex-wrap gap-x-3 gap-y-1 text-ink-faint">
                           <span>{routine.stats.campus_days} days</span>
-                          <span>{formatGap(routine.stats.gap_minutes)}</span>
+                          <span title="Idle time between classes, counted only when it lasts a full class slot or more">
+                            {formatGap(routine.stats.gap_minutes)}
+                          </span>
                           <span>{routine.stats.total_credits.toFixed(1)} cr</span>
                         </span>
                         <span className="mt-1.5 flex flex-wrap gap-x-2 gap-y-0.5">
                           {routine.courses.map((course) => (
                             <span key={course.code} className="font-mono text-[0.65rem] text-ink-soft">
                               {course.code}
+                              <span className="text-green-deep"> · {course.section}</span>
                             </span>
                           ))}
                         </span>
@@ -487,7 +643,7 @@ export function ResultsPanel({
                   <button
                     type="button"
                     onClick={() => onPageChange(pageError.page)}
-                    className="mono-label mt-1.5 text-coral-ink underline decoration-coral/40 underline-offset-4 hover:decoration-coral"
+                    className="cue-underline mono-label mt-1.5 text-coral-ink"
                   >
                     Retry this page
                   </button>
@@ -500,7 +656,7 @@ export function ResultsPanel({
                   onClick={() => onPageChange(page - 1)}
                   disabled={pageLoading || page === 0}
                   aria-label="Previous page"
-                  className="inline-flex h-9 items-center gap-1 border border-rule px-2 font-mono text-[0.6875rem] text-ink transition-colors hover:border-ink disabled:cursor-not-allowed disabled:border-rule/60 disabled:text-ink-faint"
+                  className="press inline-flex h-9 items-center gap-1 border border-rule px-2 font-mono text-[0.6875rem] text-ink hover:border-ink disabled:cursor-not-allowed disabled:border-rule/60 disabled:text-ink-faint"
                 >
                   <ArrowLeftIcon className="h-3.5 w-3.5" />
                   Prev
@@ -519,7 +675,7 @@ export function ResultsPanel({
                       disabled={pageLoading}
                       aria-label={`Page ${item + 1}`}
                       aria-current={item === page ? "page" : undefined}
-                      className={`inline-flex h-9 min-w-9 items-center justify-center border px-2 font-mono text-[0.6875rem] tabular transition-colors ${
+                      className={`press inline-flex h-9 min-w-9 items-center justify-center border px-2 font-mono text-[0.6875rem] tabular ${
                         item === page
                           ? "border-green bg-green text-paper"
                           : "border-rule text-ink hover:border-ink hover:bg-paper"
@@ -545,7 +701,7 @@ export function ResultsPanel({
                     (result.total_is_partial && !result.truncated)
                   }
                   aria-label="Next page"
-                  className="inline-flex h-9 items-center gap-1 border border-rule px-2 font-mono text-[0.6875rem] text-ink transition-colors hover:border-ink disabled:cursor-not-allowed disabled:border-rule/60 disabled:text-ink-faint"
+                  className="press inline-flex h-9 items-center gap-1 border border-rule px-2 font-mono text-[0.6875rem] text-ink hover:border-ink disabled:cursor-not-allowed disabled:border-rule/60 disabled:text-ink-faint"
                 >
                   Next
                   <ArrowRightIcon className="h-3.5 w-3.5" />
@@ -562,7 +718,7 @@ export function ResultsPanel({
                 <button
                   type="button"
                   onClick={onBack}
-                  className="inline-flex min-h-11 items-center gap-2 border border-rule-strong px-4 text-[0.9375rem] text-ink transition-colors hover:border-ink hover:bg-paper"
+                  className="press inline-flex min-h-11 items-center gap-2 border border-rule-strong px-4 text-[0.9375rem] text-ink hover:border-ink hover:bg-paper"
                 >
                   <ArrowLeftIcon className="h-4 w-4" />
                   Adjust constraints
@@ -570,7 +726,7 @@ export function ResultsPanel({
                 <button
                   type="button"
                   onClick={onRetry}
-                  className="inline-flex min-h-11 items-center gap-2 px-1 text-[0.9375rem] text-ink-soft hover:text-ink"
+                  className="cue-underline inline-flex min-h-11 items-center gap-2 px-1 text-[0.9375rem] text-ink-soft hover:text-ink"
                 >
                   Re-run solver
                 </button>
@@ -589,7 +745,18 @@ export function ResultsPanel({
                     ease: [0.2, 0.7, 0.2, 1],
                   }}
                 >
-                  <RoutineDetail routine={selected} />
+                  <RoutineDetail
+                    routine={selected}
+                    planName={planName}
+                    catalog={catalog}
+                    constraints={constraints}
+                    preferences={preferences}
+                    pendingSwap={pendingSwap}
+                    swapError={swapError}
+                    onSwap={onSwap}
+                    onMarkFull={onMarkFull}
+                    onRestoreSection={onRestoreSection}
+                  />
                 </motion.div>
               )}
             </AnimatePresence>

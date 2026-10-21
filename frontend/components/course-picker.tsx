@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useId, useRef } from "react";
-import type { Course } from "@/lib/types";
+import type { Course, Program } from "@/lib/types";
+import { formatProgramList } from "@/lib/schedule";
 import { CourseRow } from "./course-row";
 import { ProgramToggle } from "./program-toggle";
 import { AlertIcon, SearchIcon } from "./icons";
@@ -12,13 +13,13 @@ type CoursePickerProps = {
   courses: Course[];
   totalCourses: number;
   query: string;
-  program: string;
-  programs: string[];
+  values: Program[];
+  programs: Program[];
   counts: Record<string, number>;
   selectedCodes: Set<string>;
   headingRef?: React.RefObject<HTMLHeadingElement | null>;
   onQueryChange: (query: string) => void;
-  onProgramChange: (program: string) => void;
+  onProgramChange: (values: Program[]) => void;
   onToggle: (code: string) => void;
   onRetry: () => void;
 };
@@ -29,7 +30,7 @@ export function CoursePicker({
   courses,
   totalCourses,
   query,
-  program,
+  values,
   programs,
   counts,
   selectedCodes,
@@ -60,7 +61,7 @@ export function CoursePicker({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
-  const programLabel = program === "all" ? "all programs" : program;
+  const programLabel = formatProgramList(programs);
 
   return (
     <section aria-labelledby="picker-title" className="min-w-0">
@@ -108,7 +109,7 @@ export function CoursePicker({
               placeholder="Code, title or faculty"
               autoComplete="off"
               spellCheck={false}
-              className="h-10 w-full border border-rule bg-paper-raised pl-9 pr-12 text-[0.9375rem] text-ink placeholder:text-ink-faint focus:border-green focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-green"
+              className="h-10 w-full border border-rule bg-paper-raised pl-9 pr-12 text-[0.9375rem] text-ink transition-colors duration-[var(--duration-quick)] placeholder:text-ink-faint hover:border-rule-strong focus:border-green focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-green"
             />
             <kbd
               aria-hidden
@@ -120,7 +121,7 @@ export function CoursePicker({
         </div>
 
         <ProgramToggle
-          value={program}
+          values={values}
           programs={programs}
           counts={counts}
           disabled={status !== "ready"}
@@ -168,7 +169,7 @@ export function CoursePicker({
               <button
                 type="button"
                 onClick={onRetry}
-                className="mono-label mt-3 border border-ink px-3 py-1.5 text-ink transition-colors hover:bg-ink hover:text-paper"
+                className="press mono-label mt-3 border border-ink px-3 py-1.5 text-ink hover:bg-ink hover:text-paper"
               >
                 Try again
               </button>
@@ -198,13 +199,13 @@ export function CoursePicker({
             <p className="mt-1.5 max-w-[46ch] text-[0.875rem] leading-relaxed text-ink-soft">
               {query
                 ? `Search covers titles, codes, and faculty names. ${totalCourses} courses available.`
-                : `No course carries the ${programLabel} program tag in this catalog.`}
+                : `No course is offered to ${programLabel} in this catalog.`}
             </p>
             {query && (
               <button
                 type="button"
                 onClick={() => onQueryChange("")}
-                className="mono-label mt-4 border border-ink px-3 py-1.5 text-ink transition-colors hover:bg-ink hover:text-paper"
+                className="press mono-label mt-4 border border-ink px-3 py-1.5 text-ink hover:bg-ink hover:text-paper"
               >
                 Clear search
               </button>

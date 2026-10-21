@@ -5,6 +5,7 @@ import type {
   Day,
   ManualProject,
   Meeting,
+  Program,
   TimePreference,
 } from "./types";
 
@@ -12,7 +13,7 @@ import type {
 export const DAYS: Day[] = ["Sat", "Sun", "Mon", "Tue", "Wed"];
 
 /** Courses whose section and weekly slot may be supplied by the student. */
-export const PROJECT_COURSE_CODES = new Set(["CSE 4000A", "DS 4000A"]);
+export const PROJECT_COURSE_CODES = new Set(["CSE 4000A", "DS 4000A", "EEE 4902"]);
 
 export function isProjectCourse(course: Course): boolean {
   return PROJECT_COURSE_CODES.has(course.code);
@@ -58,12 +59,16 @@ export function defaultConstraints(): Constraints {
     allowed_days: [...DAYS],
     time_preference: "any",
     preferred_off_days: [],
+    max_gap_minutes: null,
+    max_campus_days: null,
+    latest_end: null,
   };
 }
 
 export function emptyPreference(): CoursePreference {
   return {
     allowed_sections: [],
+    excluded_sections: [],
     preferred_faculty: [],
     excluded_faculty: [],
     manual_project: null,
@@ -114,6 +119,11 @@ export function formatTimeRange(start: string, end: string): string {
 
 export function sortDays(days: Day[]): Day[] {
   return [...days].sort((a, b) => DAYS.indexOf(a) - DAYS.indexOf(b));
+}
+
+/** Human label for the enabled programs, e.g. "BSCSE + BSDS". */
+export function formatProgramList(programs: Program[]): string {
+  return programs.length > 0 ? programs.join(" + ") : "no program";
 }
 
 export function formatDayList(days: Day[]): string {

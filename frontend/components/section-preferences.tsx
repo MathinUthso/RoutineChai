@@ -62,6 +62,7 @@ function overrideCount(preference: CoursePreference | undefined) {
   if (!preference) return 0;
   return (
     preference.allowed_sections.length +
+    preference.excluded_sections.length +
     preference.preferred_faculty.length +
     preference.excluded_faculty.length +
     (preference.manual_project ? 1 : 0)
@@ -147,6 +148,9 @@ export function SectionPreferences({ courses, value, onChange }: SectionPreferen
                 allowed_sections: pinned
                   ? preference.allowed_sections.filter((item) => item !== name)
                   : [...preference.allowed_sections, name],
+                excluded_sections: pinned
+                  ? preference.excluded_sections
+                  : preference.excluded_sections.filter((item) => item !== name),
                 excluded_faculty:
                   !pinned && section
                     ? preference.excluded_faculty.filter(
@@ -323,7 +327,8 @@ export function SectionPreferences({ courses, value, onChange }: SectionPreferen
                         <legend className="mono-label text-ink">Section pins</legend>
                         <p className="mt-1.5 max-w-[58ch] text-[0.8125rem] leading-relaxed text-ink-faint">
                           Pin any section to restrict the solver to it. Conditional sections — marked
-                          cond. — are only eligible when explicitly pinned.
+                          cond. — are only eligible when explicitly pinned. Sections you mark as
+                          full on the timetable tab are listed here so you can restore them.
                         </p>
                         <div className="mt-3 flex flex-wrap gap-1.5">
                           {sortedSections.map((section) => (
@@ -354,6 +359,31 @@ export function SectionPreferences({ courses, value, onChange }: SectionPreferen
                             </Chip>
                           ))}
                         </div>
+
+                        {preference.excluded_sections.length > 0 && (
+                          <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-rule pt-3">
+                            <span className="mono-label text-coral-ink">Marked full</span>
+                            {preference.excluded_sections.map((name) => (
+                              <button
+                                key={name}
+                                type="button"
+                                aria-label={`Restore section ${name} for ${course.code}`}
+                                onClick={() =>
+                                  onChange(course.code, {
+                                    ...preference,
+                                    excluded_sections: preference.excluded_sections.filter(
+                                      (item) => item !== name,
+                                    ),
+                                  })
+                                }
+                                className="press inline-flex min-h-9 items-center gap-1.5 border border-coral/50 bg-coral-tint/40 px-2 font-mono text-[0.6875rem] uppercase tracking-[0.08em] text-coral-ink hover:border-coral hover:bg-coral-tint/70"
+                              >
+                                <span className="line-through">{name}</span>
+                                <span>restore</span>
+                              </button>
+                            ))}
+                          </div>
+                        )}
                       </fieldset>
                     )}
 
@@ -453,7 +483,7 @@ export function SectionPreferences({ courses, value, onChange }: SectionPreferen
                           ? `Manual project slot · ${preference.excluded_faculty.length} excluded`
                           : count === 0
                             ? "Every standard section eligible"
-                            : `${preference.allowed_sections.length} pinned · ${preference.preferred_faculty.length} preferred · ${preference.excluded_faculty.length} excluded`}
+                            : `${preference.allowed_sections.length} pinned · ${preference.excluded_sections.length} full · ${preference.preferred_faculty.length} preferred · ${preference.excluded_faculty.length} excluded`}
                       </p>
                       <button
                         type="button"

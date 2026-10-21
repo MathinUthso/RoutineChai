@@ -33,19 +33,25 @@ export function CourseRow({ course, selected, onToggle }: CourseRowProps) {
         type="button"
         aria-pressed={selected}
         onClick={() => onToggle(course.code)}
-        className={`group relative grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 px-4 py-3.5 text-left transition-colors duration-[var(--duration-quick)] focus-visible:-outline-offset-2 sm:grid-cols-[4.75rem_minmax(0,1fr)_auto] sm:gap-x-5 ${
+        className={`group press relative grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 px-4 py-3.5 text-left focus-visible:-outline-offset-2 sm:grid-cols-[4.75rem_minmax(0,1fr)_auto] sm:gap-x-5 ${
           selected ? "bg-paper" : "hover:bg-paper/55"
         }`}
       >
+        {!selected && (
+          <span
+            aria-hidden
+            className="absolute inset-y-0 left-0 w-[2px] origin-top scale-y-0 bg-green/70 transition-transform duration-[var(--duration-base)] ease-[var(--ease-ledger)] group-hover:scale-y-100 group-focus-visible:scale-y-100"
+          />
+        )}
         <span
-          className={`font-mono text-[0.8125rem] font-medium tracking-[0.02em] tabular transition-colors ${
+          className={`col-start-1 row-start-1 font-mono text-[0.8125rem] font-medium tracking-[0.02em] tabular transition-colors ${
             selected ? "text-green" : "text-ink"
           }`}
         >
           {course.code}
         </span>
 
-        <span className="col-span-2 row-start-2 mt-0.5 flex min-w-0 flex-col gap-1 sm:col-span-1 sm:row-start-1 sm:mt-0">
+        <span className="col-span-2 row-start-2 mt-0.5 flex min-w-0 flex-col gap-1 sm:col-span-1 sm:col-start-2 sm:row-start-1 sm:mt-0">
           <span className="text-[0.9375rem] leading-snug text-ink">{course.title}</span>
           <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <span className="mono-label text-ink-faint">{course.programs.join(" · ")}</span>
@@ -79,9 +85,9 @@ export function CourseRow({ course, selected, onToggle }: CourseRowProps) {
           </span>
           <span
             aria-hidden
-            className={`grid h-5 w-5 place-items-center border transition-colors duration-[var(--duration-quick)] ${
+            className={`grid h-5 w-5 place-items-center border transition-[background-color,border-color,color,transform] duration-[var(--duration-quick)] ${
               selected
-                ? "border-green bg-green text-paper"
+                ? "scale-105 border-green bg-green text-paper"
                 : "border-rule-strong text-ink-faint group-hover:border-green group-hover:text-green"
             }`}
           >

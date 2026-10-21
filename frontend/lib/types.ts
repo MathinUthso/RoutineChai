@@ -5,7 +5,7 @@
 
 export type Day = "Sat" | "Sun" | "Mon" | "Tue" | "Wed";
 
-export type Program = "BSCSE" | "BSDS";
+export type Program = "BSCSE" | "BSDS" | "BSEEE";
 
 export type CourseKind = "theory" | "lab";
 
@@ -44,7 +44,7 @@ export interface Course {
 
 export interface CatalogResponse {
   term: string;
-  programs: string[];
+  programs: Program[];
   /** ISO 8601 timestamp. */
   generated_at: string;
   source: string;
@@ -63,6 +63,12 @@ export interface Constraints {
   allowed_days: Day[];
   time_preference: TimePreference;
   preferred_off_days: Day[];
+  /** Longest single idle gap allowed per day; null means no cap. */
+  max_gap_minutes: number | null;
+  /** Distinct teaching days allowed; null means no cap. */
+  max_campus_days: number | null;
+  /** No meeting may end after this 24h clock time; null means no cap. */
+  latest_end: string | null;
 }
 
 export interface ManualProject {
@@ -79,6 +85,8 @@ export interface GenerateRequestCourse {
   code: string;
   /** Empty means every standard section is eligible. */
   allowed_sections: string[];
+  /** Sections marked full; removed from the solver's candidates. */
+  excluded_sections: string[];
   /** Faculty names or initials; empty means no preference. */
   preferred_faculty: string[];
   /** Faculty names or initials; matching sections are removed entirely. */
@@ -90,13 +98,15 @@ export interface GenerateRequestCourse {
 /** UI-side preference shape, submitted as `GenerateRequestCourse`. */
 export interface CoursePreference {
   allowed_sections: string[];
+  excluded_sections: string[];
   preferred_faculty: string[];
   excluded_faculty: string[];
   manual_project: ManualProject | null;
 }
 
 export interface GenerateRequest {
-  program: Program;
+  /** Any course offered to at least one of these programs is eligible. */
+  programs: Program[];
   courses: GenerateRequestCourse[];
   constraints: Constraints;
   /** Page size, 1–50. */

@@ -91,7 +91,7 @@ export function Docket({ selected, catalogSize, busy, onRemove, onClear, onRevie
               <button
                 type="button"
                 onClick={onClear}
-                className="mono-label text-ink-faint underline decoration-rule decoration-1 underline-offset-[3px] transition-colors hover:text-coral-ink hover:decoration-coral"
+                className="cue-underline mono-label text-ink-faint hover:text-coral-ink"
               >
                 Clear
               </button>
@@ -145,7 +145,7 @@ export function Docket({ selected, catalogSize, busy, onRemove, onClear, onRevie
                         type="button"
                         onClick={() => onRemove(course.code)}
                         aria-label={`Remove ${course.code}, ${course.title}`}
-                        className="grid w-7 place-items-center border-l border-rule text-ink-faint transition-colors hover:bg-coral-tint hover:text-coral-ink"
+                        className="press grid w-7 place-items-center self-stretch border-l border-rule text-ink-faint hover:bg-coral-tint hover:text-coral-ink"
                       >
                         <CloseIcon className="h-3 w-3" />
                       </button>
@@ -168,13 +168,29 @@ export function Docket({ selected, catalogSize, busy, onRemove, onClear, onRevie
             <div className="px-3 py-3">
               <dt className="mono-label text-ink-faint">Labs</dt>
               <dd className="mt-1.5 font-mono text-figure leading-none tabular text-ink">
-                {String(labCount).padStart(2, "0")}
+                <motion.span
+                  key={labCount}
+                  initial={reduceMotion ? false : { opacity: 0, y: 5 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={reduceMotion ? { duration: 0 } : spring.select}
+                  className="inline-block"
+                >
+                  {String(labCount).padStart(2, "0")}
+                </motion.span>
               </dd>
             </div>
             <div className="py-3 pl-3">
               <dt className="mono-label text-ink-faint">Sections</dt>
               <dd className="mt-1.5 font-mono text-figure leading-none tabular text-ink">
-                {String(sectionCount).padStart(2, "0")}
+                <motion.span
+                  key={sectionCount}
+                  initial={reduceMotion ? false : { opacity: 0, y: 5 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={reduceMotion ? { duration: 0 } : spring.select}
+                  className="inline-block"
+                >
+                  {String(sectionCount).padStart(2, "0")}
+                </motion.span>
               </dd>
             </div>
           </dl>
@@ -204,7 +220,7 @@ export function Docket({ selected, catalogSize, busy, onRemove, onClear, onRevie
             type="button"
             onClick={onReview}
             disabled={empty || busy}
-            className="group mt-4 flex w-full items-center justify-between gap-3 bg-green px-4 py-3 text-paper transition-colors duration-[var(--duration-quick)] hover:bg-green-deep focus-visible:outline-2 focus-visible:outline-offset-[3px] focus-visible:outline-coral disabled:cursor-not-allowed disabled:bg-paper-sunk disabled:text-ink-faint"
+            className="group press mt-4 flex w-full items-center justify-between gap-3 bg-green px-4 py-3 text-paper hover:bg-green-deep focus-visible:outline-2 focus-visible:outline-offset-[3px] focus-visible:outline-coral disabled:cursor-not-allowed disabled:bg-paper-sunk disabled:text-ink-faint"
           >
             <span className="text-[0.9375rem] font-medium">Set constraints</span>
             <ArrowRightIcon className="h-4 w-4 transition-transform duration-[var(--duration-quick)] group-enabled:group-hover:translate-x-0.5" />

@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { IBM_Plex_Mono, Space_Grotesk } from "next/font/google";
+import { AmbientLedger } from "@/components/ambient-ledger";
 import "./globals.css";
 
 const display = Space_Grotesk({
@@ -28,7 +29,10 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="en" className={`${display.variable} ${mono.variable} h-full`}>
-      <body className="flex min-h-full flex-col bg-paper text-ink antialiased">{children}</body>
+      <body className="flex min-h-full flex-col bg-paper text-ink antialiased">
+        <AmbientLedger />
+        <div className="relative z-10 flex min-h-full flex-1 flex-col">{children}</div>
+      </body>
     </html>
   );
 }

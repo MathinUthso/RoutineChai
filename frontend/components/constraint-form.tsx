@@ -61,7 +61,7 @@ function Segmented({
           return (
             <label
               key={option.value}
-              className={`relative cursor-pointer select-none ${
+              className={`press relative cursor-pointer select-none ${
                 index > 0 ? "border-l border-rule" : ""
               } ${checked ? "bg-green" : "hover:bg-paper-raised"}`}
             >
