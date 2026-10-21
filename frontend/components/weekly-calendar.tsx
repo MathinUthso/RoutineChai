@@ -311,9 +311,14 @@ export function WeeklyCalendar({ routine }: { routine: Routine }) {
                               {item.course.section}
                             </span>
                           </span>
-                          <span className="mt-0.5 shrink-0 truncate font-mono text-[0.625rem] leading-tight text-ink-soft">
-                            {formatTimeRange(item.meeting.start, item.meeting.end)} ·{" "}
-                            {roomOf(item.meeting)}
+                          <span className="mt-0.5 flex shrink-0 flex-wrap gap-x-1 font-mono text-[0.625rem] leading-tight text-ink-soft">
+                            <span className="shrink-0">
+                              {formatTimeRange(item.meeting.start, item.meeting.end)}
+                            </span>
+                            <span aria-hidden className="shrink-0">
+                              ·
+                            </span>
+                            <span className="truncate">{roomOf(item.meeting)}</span>
                           </span>
                           <span className="mt-0.5 min-h-0 shrink truncate font-mono text-[0.5625rem] leading-tight text-ink-soft">
                             {item.course.faculty}
