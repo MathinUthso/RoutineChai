@@ -240,6 +240,12 @@ doc/              Source registrar PDFs
 
 The API and the UI are deployed separately: FastAPI on Render, Next.js on Vercel.
 
+| Piece | URL |
+| --- | --- |
+| UI (Vercel) | https://routine-chai.vercel.app |
+| API (Render) | https://uiu-routine-api.onrender.com |
+| Health check | https://uiu-routine-api.onrender.com/health |
+
 ### Backend on Render
 
 `render.yaml` in the repo root is a Render Blueprint, so the service can be created from the
