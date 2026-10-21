@@ -301,7 +301,7 @@ export function WeeklyCalendar({ routine }: { routine: Routine }) {
                           }}
                           className={`absolute inset-x-[3px] z-10 flex min-h-7 flex-col overflow-hidden rounded-[2px] border border-rule-strong/45 border-l-[3px] px-1.5 py-1 text-left transition-[box-shadow,filter] duration-[var(--duration-quick)] hover:z-20 hover:shadow-row hover:brightness-[0.985] focus-visible:z-20 ${tone.block}`}
                         >
-                          <span className="flex items-baseline justify-between gap-1">
+                          <span className="flex shrink-0 items-baseline justify-between gap-1">
                             <span
                               className={`truncate font-mono text-[0.6875rem] font-medium leading-tight ${tone.code}`}
                             >
@@ -311,12 +311,15 @@ export function WeeklyCalendar({ routine }: { routine: Routine }) {
                               {item.course.section}
                             </span>
                           </span>
-                          <span className="mt-0.5 truncate font-mono text-[0.625rem] leading-tight text-ink-soft">
+                          <span className="mt-0.5 shrink-0 truncate font-mono text-[0.625rem] leading-tight text-ink-soft">
                             {formatTimeRange(item.meeting.start, item.meeting.end)} ·{" "}
                             {roomOf(item.meeting)}
                           </span>
+                          <span className="mt-0.5 min-h-0 shrink truncate font-mono text-[0.5625rem] leading-tight text-ink-soft">
+                            {item.course.faculty}
+                          </span>
                           {item.course.kind === "lab" && (
-                            <span className="mono-label mt-auto text-[0.5rem] text-ink-faint">Lab</span>
+                            <span className="mono-label mt-auto shrink-0 text-[0.5rem] text-ink-faint">Lab</span>
                           )}
                           {item.clamped && (
                             <span className="sr-only">Partially outside the 8:30 AM–4:30 PM window.</span>
