@@ -31,14 +31,14 @@ function bandFor(total: number) {
   }
   if (total < BAND_MIN) {
     return {
-      label: `Part-time · ${(BAND_MIN - total).toFixed(1)} below 12.0`,
+      label: `Loser Shala, credit Bara · ${(BAND_MIN - total).toFixed(1)} below 12.0`,
       tone: "text-ink-soft",
       dot: "bg-coral",
     };
   }
   if (total <= BAND_MAX) {
     return {
-      label: "Full-time band · 12.0 to 18.0 credits",
+      label: "Good Boy · 12.0 to 18.0 credits",
       tone: "text-green",
       dot: "bg-green",
     };
