@@ -81,3 +81,13 @@ export function AlertIcon({ className }: IconProps) {
     </svg>
   );
 }
+
+export function CalendarIcon({ className }: IconProps) {
+  return (
+    <svg {...base} className={className}>
+      <rect x="2.25" y="3.25" width="11.5" height="10.5" rx="0.5" />
+      <path d="M2.25 6.25h11.5M5.25 2v2.5M10.75 2v2.5" />
+      <path d="M5 8.75h1M7.5 8.75h1M10 8.75h1M5 11h1M7.5 11h1" />
+    </svg>
+  );
+}
