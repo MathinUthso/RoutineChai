@@ -1,7 +1,26 @@
-import type { Constraints, CoursePreference, Day, Meeting, TimePreference } from "./types";
+import type {
+  Constraints,
+  Course,
+  CoursePreference,
+  Day,
+  ManualProject,
+  Meeting,
+  TimePreference,
+} from "./types";
 
 /** Registrar week: Saturday through Wednesday only. */
 export const DAYS: Day[] = ["Sat", "Sun", "Mon", "Tue", "Wed"];
+
+/** Courses whose section and weekly slot may be supplied by the student. */
+export const PROJECT_COURSE_CODES = new Set(["CSE 4000A", "DS 4000A"]);
+
+export function isProjectCourse(course: Course): boolean {
+  return PROJECT_COURSE_CODES.has(course.code);
+}
+
+export function emptyManualProject(): ManualProject {
+  return { section: "", day: "Sat", start: "09:00", end: "11:00" };
+}
 
 export const DAY_NAMES: Record<Day, string> = {
   Sat: "Saturday",
@@ -43,7 +62,12 @@ export function defaultConstraints(): Constraints {
 }
 
 export function emptyPreference(): CoursePreference {
-  return { allowed_sections: [], preferred_faculty: [], excluded_faculty: [] };
+  return {
+    allowed_sections: [],
+    preferred_faculty: [],
+    excluded_faculty: [],
+    manual_project: null,
+  };
 }
 
 /** Returns minutes since midnight for "HH:MM", or null when unparseable. */
@@ -56,6 +80,36 @@ export function minutesOfDay(value: string): number | null {
   if (hours > 23 || minutes > 59) return null;
 
   return hours * 60 + minutes;
+}
+
+/** 12-hour clock label, e.g. "2:00 PM" or "11:10 AM". */
+export function formatTime(value: string): string {
+  const minutes = minutesOfDay(value);
+  if (minutes === null) return value;
+  return formatClockLabel(minutes);
+}
+
+/** 12-hour clock label from minutes since midnight; suffix can be hidden on axes. */
+export function formatClockLabel(minutes: number, includeSuffix = true): string {
+  const normalized = ((minutes % (24 * 60)) + 24 * 60) % (24 * 60);
+  const hours = Math.floor(normalized / 60);
+  const mins = normalized % 60;
+  const suffix = hours >= 12 ? "PM" : "AM";
+  const label = `${hours % 12 || 12}:${String(mins).padStart(2, "0")}`;
+  return includeSuffix ? `${label} ${suffix}` : label;
+}
+
+/** Compact range, e.g. "2:00–4:30 PM" or "11:10 AM–1:40 PM". */
+export function formatTimeRange(start: string, end: string): string {
+  const startLabel = formatTime(start);
+  const endLabel = formatTime(end);
+  const startSuffix = startLabel.slice(-2);
+  const endSuffix = endLabel.slice(-2);
+
+  if (startSuffix === endSuffix) {
+    return `${startLabel.slice(0, -3)}–${endLabel}`;
+  }
+  return `${startLabel}–${endLabel}`;
 }
 
 export function sortDays(days: Day[]): Day[] {
@@ -84,7 +138,7 @@ export function sortMeetings(meetings: Meeting[]): Meeting[] {
 }
 
 export function formatMeeting(meeting: Meeting): string {
-  return `${meeting.day} ${meeting.start}–${meeting.end} · ${meeting.room}`;
+  return `${meeting.day} ${formatTimeRange(meeting.start, meeting.end)} · ${meeting.room}`;
 }
 
 export function validateConstraints(constraints: Constraints): ConstraintIssue[] {
@@ -122,6 +176,53 @@ export function validateConstraints(constraints: Constraints): ConstraintIssue[]
   return issues;
 }
 
+export type PreferenceIssue = {
+  code: string;
+  message: string;
+};
+
+/**
+ * A manual project slot replaces the catalog sections, so it must carry a
+ * label and a well-formed weekly meeting before the solver can use it.
+ */
+export function validateManualProjects(
+  courses: Course[],
+  preferences: Record<string, CoursePreference>,
+): PreferenceIssue[] {
+  const issues: PreferenceIssue[] = [];
+
+  for (const course of courses) {
+    const manual = preferences[course.code]?.manual_project;
+    if (!manual) continue;
+
+    if (!isProjectCourse(course)) {
+      issues.push({
+        code: course.code,
+        message: "Manual slots are only available for project courses.",
+      });
+      continue;
+    }
+
+    if (!manual.section.trim()) {
+      issues.push({ code: course.code, message: "Enter the project section." });
+    }
+
+    const start = minutesOfDay(manual.start);
+    const end = minutesOfDay(manual.end);
+    if (start === null || end === null) {
+      issues.push({ code: course.code, message: "Enter a start and end time." });
+    } else if (start >= end) {
+      issues.push({ code: course.code, message: "The meeting must end after it starts." });
+    }
+
+    if (!DAYS.includes(manual.day)) {
+      issues.push({ code: course.code, message: "Choose a teaching day." });
+    }
+  }
+
+  return issues;
+}
+
 /** Plain-language reading of the sheet for the summary column. */
 export function describeConstraints(constraints: Constraints): {
   label: string;
@@ -132,7 +233,7 @@ export function describeConstraints(constraints: Constraints): {
     blocked.length === 0
       ? "None"
       : blocked.length === 1
-        ? `${blocked[0].day} ${blocked[0].start}–${blocked[0].end}`
+        ? `${blocked[0].day} ${formatTimeRange(blocked[0].start, blocked[0].end)}`
         : `${blocked.length} windows`;
 
   return [

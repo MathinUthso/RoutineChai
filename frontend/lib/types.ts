@@ -65,6 +65,16 @@ export interface Constraints {
   preferred_off_days: Day[];
 }
 
+export interface ManualProject {
+  /** Section label supplied by the student for the project course. */
+  section: string;
+  day: Day;
+  /** 24h clock, "HH:MM". */
+  start: string;
+  /** 24h clock, "HH:MM". */
+  end: string;
+}
+
 export interface GenerateRequestCourse {
   code: string;
   /** Empty means every standard section is eligible. */
@@ -73,6 +83,8 @@ export interface GenerateRequestCourse {
   preferred_faculty: string[];
   /** Faculty names or initials; matching sections are removed entirely. */
   excluded_faculty: string[];
+  /** Project-only manual placement; replaces the catalog sections. */
+  manual_project: ManualProject | null;
 }
 
 /** UI-side preference shape, submitted as `GenerateRequestCourse`. */
@@ -80,14 +92,17 @@ export interface CoursePreference {
   allowed_sections: string[];
   preferred_faculty: string[];
   excluded_faculty: string[];
+  manual_project: ManualProject | null;
 }
 
 export interface GenerateRequest {
   program: Program;
   courses: GenerateRequestCourse[];
   constraints: Constraints;
-  /** 1–50; the UI asks for 10. */
+  /** Page size, 1–50. */
   limit: number;
+  /** Zero-based routine offset for server-side paging. */
+  offset: number;
 }
 
 export type DiagnosticsReason =
@@ -110,6 +125,8 @@ export interface RoutineCourse {
   credits: number;
   kind: CourseKind;
   meetings: Meeting[];
+  /** True when the student supplied the project section and meeting. */
+  manual: boolean;
 }
 
 export interface RoutineStats {
@@ -139,5 +156,12 @@ export interface Routine {
 export interface GenerateResult {
   routines: Routine[];
   diagnostics: Diagnostics[];
+  /** More routines exist beyond this page. */
   truncated: boolean;
+  /** Total unique routines found; a lower bound when `total_is_partial`. */
+  total: number;
+  /** True when the solver stopped before proving the total. */
+  total_is_partial: boolean;
+  offset: number;
+  limit: number;
 }
