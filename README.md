@@ -233,10 +233,34 @@ backend/
 frontend/
   app/            Next.js page, layout, global styles
   components/     Course picker, constraints, results, ledger UI
-  lib/            API client, shared types, schedule helpers, motion tokens
+  lib/            API client, shared types, schedule helpers, motion tokens,
+                  consent and snapshot storage
 
 doc/              Source registrar PDFs
 ```
+
+## Saved Details
+
+The planner asks once, in a bottom-sheet dialog, whether to keep the student's routine details so
+a refresh does not mean retyping everything.
+
+| Choice | What is stored | Where |
+| --- | --- | --- |
+| Not now | The answer only — no course, constraint, or preference data | `routinechai.consent=declined` cookie |
+| Save my details | Courses, blocked windows, live caps, per-course section and faculty preferences, the open step, and the selected plan | `routinechai.state` in `localStorage` |
+
+- The consent cookie lives for 30 days. The snapshot is versioned (`v: 1`) and discarded if the
+  shape no longer matches, so an old or corrupt entry cannot break the page.
+- Nothing is written before the student agrees. `writeSnapshot` re-checks the consent cookie, so
+  the snapshot cannot be written by a path that skipped the prompt.
+- On restore the catalog is consulted first: course codes, sections, and faculty names that no
+  longer exist in the catalog are dropped instead of being resubmitted.
+- If the student ended on the Timetable tab, the plans are regenerated once so the routine is
+  waiting for them; otherwise the form comes back on the step they left it.
+- "Forget saved details" clears the stored snapshot and stops new writes. The form on screen is
+  left alone so in-progress work is not thrown away.
+- The details never reach the API. The server sees the same request whether or not the student
+  opted in.
 
 ## Deployment
 

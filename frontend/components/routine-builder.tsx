@@ -21,10 +21,21 @@ import type {
   Routine,
 } from "@/lib/types";
 import { ConstraintsPanel } from "./constraints-panel";
+import { ConsentBanner } from "./consent-banner";
 import { CoursePicker } from "./course-picker";
 import { Docket } from "./docket";
 import { ResultsPanel } from "./results-panel";
 import { StepRail } from "./step-rail";
+import {
+  clearSnapshot,
+  pruneSnapshot,
+  readConsent,
+  readSnapshot,
+  SNAPSHOT_VERSION,
+  writeConsent,
+  writeSnapshot,
+} from "@/lib/persist";
+import type { ConsentDecision } from "@/lib/persist";
 
 type CatalogState =
   | { status: "loading" }
@@ -110,6 +121,10 @@ export function RoutineBuilder() {
   const [pendingSwap, setPendingSwap] = useState<{ code: string; section: string } | null>(null);
   const [swapError, setSwapError] = useState<string | null>(null);
 
+  const [consent, setConsent] = useState<ConsentDecision | null>(null);
+  const [hydrated, setHydrated] = useState(false);
+  const [restoreStep, setRestoreStep] = useState<1 | 2 | 3 | null>(null);
+
   const panelRef = useRef<HTMLDivElement>(null);
   const stepHeadingRef = useRef<HTMLHeadingElement>(null);
   const requestRef = useRef<AbortController | null>(null);
@@ -120,7 +135,28 @@ export function RoutineBuilder() {
     const controller = new AbortController();
 
     getCatalog(controller.signal)
-      .then((catalog) => setCatalogState({ status: "ready", catalog }))
+      .then((catalog) => {
+        setCatalogState({ status: "ready", catalog });
+
+        const decision = readConsent();
+        if (decision) setConsent(decision);
+
+        if (decision === "accepted") {
+          const stored = readSnapshot();
+          if (stored && stored.selectedCodes.length > 0) {
+            const clean = pruneSnapshot(stored, catalog);
+            setPrograms(clean.programs);
+            setSelectedCodes(clean.selectedCodes);
+            setConstraints(clean.constraints);
+            setPreferences(clean.preferences);
+            setStep(clean.step);
+            setSelectedRoutineId(clean.selectedRoutineId);
+            if (clean.step === 3) setRestoreStep(3);
+          }
+        }
+
+        setHydrated(true);
+      })
       .catch((error: unknown) => {
         if (error instanceof DOMException && error.name === "AbortError") return;
         setCatalogState({ status: "error", message: errorMessage(error) });
@@ -300,6 +336,50 @@ export function RoutineBuilder() {
     }
   };
 
+  // Persist the student's choices only after they explicitly accept cookies.
+  // Debounced so rapid live refinements don't hammer localStorage.
+  useEffect(() => {
+    if (!hydrated || consent !== "accepted") return;
+
+    const timer = window.setTimeout(() => {
+      writeSnapshot({
+        v: SNAPSHOT_VERSION,
+        savedAt: new Date().toISOString(),
+        programs,
+        selectedCodes,
+        constraints,
+        preferences,
+        step,
+        selectedRoutineId,
+      });
+    }, 400);
+
+    return () => window.clearTimeout(timer);
+  }, [
+    hydrated,
+    consent,
+    programs,
+    selectedCodes,
+    constraints,
+    preferences,
+    step,
+    selectedRoutineId,
+  ]);
+
+  // When a previous visit ended on the Timetable tab, regenerate the plans
+  // once the catalog is ready so the routine is waiting for them.
+  useEffect(() => {
+    if (!restoreStep || !catalog || !hydrated) return;
+
+    const timer = window.setTimeout(() => {
+      void handleGenerate();
+      setRestoreStep(null);
+    }, reduceMotion ? 0 : 200);
+
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [restoreStep, catalog, hydrated, reduceMotion]);
+
   const handlePageChange = async (nextPage: number) => {
     if (
       !lastRequest ||
@@ -401,6 +481,25 @@ export function RoutineBuilder() {
       liveTimerRef.current = null;
       void runLive(nextConstraints, nextPreferences);
     }, LIVE_DEBOUNCE_MS);
+  };
+
+  const handleAccept = () => {
+    writeConsent("accepted");
+    setConsent("accepted");
+  };
+
+  const handleDecline = () => {
+    writeConsent("declined");
+    clearSnapshot();
+    setConsent("declined");
+  };
+
+  const handleForget = () => {
+    // Clears the saved copy and stops writing new ones. The form on screen is
+    // left alone so in-progress work is not thrown away without warning.
+    clearSnapshot();
+    writeConsent("declined");
+    setConsent("declined");
   };
 
   const handleLiveConstraints = (next: Constraints) => {
@@ -645,6 +744,38 @@ export function RoutineBuilder() {
           </AnimatePresence>
         </div>
       </main>
+
+      {hydrated && consent !== null && (
+        <div className="mx-auto flex w-full max-w-[1480px] flex-col gap-2 px-[var(--space-gutter)] pb-10 sm:flex-row sm:items-baseline sm:justify-between sm:gap-3">
+          <p className="mono-label text-ink-faint">
+            Details stay in this browser · expire after 30 days
+          </p>
+          <div className="flex flex-wrap items-center gap-3">
+            {consent === "declined" ? (
+              <button
+                type="button"
+                onClick={() => setConsent(null)}
+                className="press mono-label cue-underline text-ink"
+              >
+                Save my details
+              </button>
+            ) : null}
+            <button
+              type="button"
+              onClick={handleForget}
+              className="press mono-label cue-underline text-ink-faint hover:text-coral-ink"
+            >
+              Forget saved details
+            </button>
+          </div>
+        </div>
+      )}
+
+      <ConsentBanner
+        open={hydrated && consent === null}
+        onAccept={handleAccept}
+        onDecline={handleDecline}
+      />
     </>
   );
 }
