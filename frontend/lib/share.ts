@@ -24,6 +24,9 @@ const MAX_MANUAL_SLOTS = 3;
 const MAX_CODE_LENGTH = 32;
 const MAX_SECTION_LENGTH = 16;
 
+/** Longest display name a link can carry, in characters. */
+export const SHARE_NAME_MAX_LENGTH = 40;
+
 /** A shared routine, decoded from a link token. */
 export type SharedPlan = {
   v: typeof SHARE_VERSION;
@@ -31,6 +34,8 @@ export type SharedPlan = {
   p: Program[];
   /** Course code and section name pairs. */
   c: [string, string][];
+  /** Who the plan belongs to, as shown on the shared page. */
+  n?: string;
   /** Manual project slots: code, section label, day, start, end. */
   m?: [string, string, Day, string, string][];
 };
@@ -101,6 +106,20 @@ function dedupePrograms(programs: Program[]): Program[] {
   return result;
 }
 
+/**
+ * Trims a display name and rejects the shapes that would break the shared
+ * page. A name is decoration, so callers drop a bad one rather than fail.
+ */
+function cleanName(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+
+  const trimmed = value.trim();
+  if (trimmed.length === 0 || trimmed.length > SHARE_NAME_MAX_LENGTH) return undefined;
+  if (/[\u0000-\u001f\u007f]/.test(trimmed)) return undefined;
+
+  return trimmed;
+}
+
 function toBase64Url(text: string): string {
   const bytes = new TextEncoder().encode(text);
   let binary = "";
@@ -124,7 +143,11 @@ function fromBase64Url(token: string): string {
  * Packs the plan a student is looking at into a URL-safe token. The payload
  * stays compact because the token travels inside a shared link.
  */
-export function encodeSharedPlan(routine: Routine, programs: Program[]): string {
+export function encodeSharedPlan(
+  routine: Routine,
+  programs: Program[],
+  name?: string,
+): string {
   const courses: [string, string][] = routine.courses.map((course) => [
     course.code,
     course.section,
@@ -138,12 +161,14 @@ export function encodeSharedPlan(routine: Routine, programs: Program[]): string 
     manual.push([course.code, course.section, meeting.day, meeting.start, meeting.end]);
   }
 
+  const displayName = cleanName(name);
   const payload: SharedPlan = {
     v: SHARE_VERSION,
     p: dedupePrograms(programs),
     c: courses,
+    ...(displayName ? { n: displayName } : {}),
+    ...(manual.length > 0 ? { m: manual } : {}),
   };
-  if (manual.length > 0) payload.m = manual;
 
   return toBase64Url(JSON.stringify(payload));
 }
@@ -195,7 +220,9 @@ function readManualSlots(value: unknown): [string, string, Day, string, string][
 
 /**
  * Reads a token that arrived from the public internet, so anything that is not
- * a well-formed payload of this version is rejected instead of trusted.
+ * a well-formed payload of this version is rejected instead of trusted. The
+ * display name is the one exception: an unusable one is dropped, so a cosmetic
+ * field can never invalidate an otherwise sound plan.
  */
 export function decodeSharedPlan(token: string): SharedPlan | null {
   if (typeof token !== "string") return null;
@@ -235,11 +262,14 @@ export function decodeSharedPlan(token: string): SharedPlan | null {
   const manual = readManualSlots(parsed.m);
   if (!manual) return null;
 
+  const name = cleanName(parsed.n);
+
   const plan: SharedPlan = {
     v: SHARE_VERSION,
     p: readPrograms(parsed.p),
     c: codes,
   };
+  if (name) plan.n = name;
   if (manual.length > 0) plan.m = manual;
 
   return plan;

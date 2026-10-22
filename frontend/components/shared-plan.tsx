@@ -119,6 +119,7 @@ export function SharedPlanView({ plan, token }: { plan: SharedPlan; token: strin
   }
 
   const { routine, programs, missing } = resolved;
+  const owner = plan.n;
   const programLabel = programs.join(" + ");
   const meta = [
     programLabel,
@@ -144,7 +145,7 @@ export function SharedPlanView({ plan, token }: { plan: SharedPlan; token: strin
           <div className="min-w-0">
             <p className="mono-label text-ink-faint">Shared routine</p>
             <h1 className="mt-1 text-[1.35rem] font-medium tracking-[-0.01em] text-ink">
-              A Fall 2026 routine, shared with you
+              {owner ? `${owner}'s Fall 2026 routine` : "A Fall 2026 routine, shared with you"}
             </h1>
             <p className="mono-label mt-1 text-ink-faint">{meta}</p>
           </div>

@@ -277,12 +277,18 @@ https://routine-chai.vercel.app/share/eyJ2IjoxLCJwIjpbIkJTQ1NFIl0sImMiOltbIkNTRS
   single safe path segment):
 
   ```json
-  {"v":1,"p":["BSCSE"],"c":[["CSE 1111","A"],["CSE 1112","B"]],"m":[["CSE 4000A","A","Sat","09:00","11:00"]]}
+  {"v":1,"p":["BSCSE"],"c":[["CSE 1111","A"],["CSE 1112","B"]],"n":"Sam","m":[["CSE 4000A","A","Sat","09:00","11:00"]]}
   ```
 
   `v` is the payload version, `p` the programs the plan was built for, `c` the course/section
-  pairs, and `m` the manual project slots. The student's blocked hours, live caps, and faculty
-  preferences are deliberately left out: only the finalised routine is shared.
+  pairs, `n` who the plan belongs to, and `m` the manual project slots. The student's blocked
+  hours, live caps, and faculty preferences are deliberately left out: only the finalised routine
+  is shared.
+- **Name.** `n` is whatever the sender typed, or a generated handle when they left the field
+  blank — a Dhaka-flavoured `AdjectiveNounNN` such as `DustyRickshaw42`, picked once per share
+  and baked into the token so the link never shifts. The shared page reads `Sam's Fall 2026
+  routine`, and a link without `n` keeps the plain "shared with you" heading. `n` was added
+  without a version bump: older tokens decode as before.
 - **Resolution.** The receiver's browser decodes the token and resolves every course and section
   against the catalog from `GET /api/catalog`, so titles, rooms, faculty, and meeting times always
   come from the live sheet. A course or section the current catalog no longer has is listed as
@@ -294,7 +300,9 @@ https://routine-chai.vercel.app/share/eyJ2IjoxLCJwIjpbIkJTQ1NFIl0sImMiOltbIkNTRS
 - **Trust.** `lib/share.ts` treats the token as untrusted input: a base64url charset check, a
   2048-character cap, a version match, at most 24 courses and 3 manual slots, bounded code and
   section names, valid clock times, and manual slots restricted to `CSE 4000A`, `DS 4000A`, and
-  `EEE 4902`. Anything else renders a "this is not a routine link" sheet instead of a plan.
+  `EEE 4902`. Anything else renders a "this is not a routine link" sheet instead of a plan. The
+  display name is the one lenient field: one longer than 40 characters or carrying control
+  characters is dropped, and the plan still renders without it.
 - **Privacy.** A token is encoded, not encrypted. The share control states that anyone holding the
   link can read the plan, and nothing is written to our server or to the receiver's storage by
   opening one.
