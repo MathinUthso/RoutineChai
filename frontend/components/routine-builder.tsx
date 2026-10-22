@@ -10,6 +10,7 @@ import {
   validateConstraints,
   validateManualProjects,
 } from "@/lib/schedule";
+import { decodeSharedPlan, resolveSharedPlan } from "@/lib/share";
 import type {
   CatalogResponse,
   Constraints,
@@ -134,6 +135,11 @@ export function RoutineBuilder() {
   const [swapError, setSwapError] = useState<string | null>(null);
   /** True when the live rules are what emptied the plan list. */
   const [liveBlocked, setLiveBlocked] = useState(false);
+  const [importNotice, setImportNotice] = useState<{
+    tone: "info" | "warning";
+    title: string;
+    message: string;
+  } | null>(null);
 
   const [restoreStep, setRestoreStep] = useState<1 | 2 | 3 | null>(null);
   const [restorePlan, setRestorePlan] = useState<{
@@ -150,6 +156,9 @@ export function RoutineBuilder() {
   const swapRef = useRef<AbortController | null>(null);
   const restoreRef = useRef<AbortController | null>(null);
   const liveTimerRef = useRef<number | null>(null);
+  const importRef = useRef<AbortController | null>(null);
+  /** A shared link is imported once; re-running the effect must not duplicate it. */
+  const importStarted = useRef(false);
 
   // The consent cookie is read straight from the browser, so the prompt never
   // waits on a cold API. On the server there is no cookie, so nothing renders
@@ -219,6 +228,134 @@ export function RoutineBuilder() {
 
   const catalog = catalogState.status === "ready" ? catalogState.catalog : null;
 
+  const importSharedPlan = useCallback(async (token: string, catalog: CatalogResponse) => {
+    const plan = decodeSharedPlan(token);
+    if (!plan) {
+      setStep(1);
+      setImportNotice({
+        tone: "warning",
+        title: "The shared link could not be read",
+        message:
+          "The link may have been cut short, or it was made by a different version of the planner. Ask the sender to share it again.",
+      });
+      return;
+    }
+
+    const resolved = resolveSharedPlan(plan, catalog);
+    if (resolved.courses.length === 0) {
+      const missingCodes = resolved.missing.map((entry) => entry.code);
+      setStep(1);
+      setImportNotice({
+        tone: "warning",
+        title: "This plan is not in the current catalog",
+        message:
+          missingCodes.length > 0
+            ? `The current catalog no longer offers ${missingCodes.join(", ")}. Ask the sender to share a plan built from the current routine.`
+            : "The shared link names no course the current catalog offers. Ask the sender to share a plan built from the current routine.",
+      });
+      return;
+    }
+
+    const nextPreferences: Record<string, CoursePreference> = {};
+    for (const course of resolved.courses) {
+      nextPreferences[course.code] = {
+        ...emptyPreference(),
+        allowed_sections: [course.section],
+        manual_project: course.manual,
+      };
+    }
+
+    // Deliberately permissive: the sender may have raised the cap, and a
+    // finalised plan has to survive the import.
+    const nextConstraints: Constraints = { ...defaultConstraints(), max_sessions_per_day: 4 };
+
+    setPrograms(resolved.programs);
+    setSelectedCodes(resolved.courses.map((course) => course.code));
+    setPreferences(nextPreferences);
+    setConstraints(nextConstraints);
+    setStep(3);
+    setCustomRoutine(null);
+    setSelectedRoutineId(null);
+    setSwapError(null);
+    setLiveBlocked(false);
+    setLiveError(null);
+    setPendingSwap(null);
+    setPage(0);
+    setPageError(null);
+    setResultState({ status: "loading" });
+
+    // Built from the decoded plan rather than requestFor: the local state the
+    // helper reads has not been committed yet in this tick.
+    const request: GenerateRequest = {
+      programs: resolved.programs,
+      courses: resolved.courses.map((course) => ({
+        code: course.code,
+        allowed_sections: [course.section],
+        excluded_sections: [],
+        preferred_faculty: [],
+        excluded_faculty: [],
+        manual_project: course.manual,
+      })),
+      constraints: nextConstraints,
+      limit: PAGE_SIZE,
+      offset: 0,
+    };
+    setLastRequest(request);
+
+    importRef.current?.abort();
+    const controller = new AbortController();
+    importRef.current = controller;
+
+    try {
+      const result = await generateRoutines(request, controller.signal);
+      if (controller.signal.aborted) return;
+      setResultState({ status: "ready", result });
+      setSelectedRoutineId(result.routines[0]?.id ?? null);
+
+      if (result.routines.length === 0) {
+        setImportNotice({
+          tone: "warning",
+          title: "This plan no longer fits",
+          message:
+            result.diagnostics[0]?.message ??
+            "The shared sections leave no valid timetable against the current catalog.",
+        });
+        return;
+      }
+
+      if (resolved.missing.length > 0) {
+        const dropped = resolved.missing
+          .map((entry) => `${entry.code} (${entry.section})`)
+          .join(", ");
+        setImportNotice({
+          tone: "warning",
+          title: "Shared plan loaded with gaps",
+          message: `These entries are no longer in the catalog and were dropped: ${dropped}.`,
+        });
+      } else {
+        setImportNotice({
+          tone: "info",
+          title: "Shared plan loaded",
+          message:
+            "These sections came from a shared link and are pinned. Use the section board to swap any of them.",
+        });
+      }
+    } catch (error) {
+      if (
+        controller.signal.aborted ||
+        (error instanceof DOMException && error.name === "AbortError")
+      ) {
+        return;
+      }
+      setResultState({ status: "error", message: errorMessage(error) });
+      setImportNotice({
+        tone: "warning",
+        title: "The shared plan could not be loaded",
+        message: errorMessage(error),
+      });
+    }
+  }, []);
+
   const counts = useMemo<Record<string, number>>(() => {
     if (!catalog) return {};
     return Object.fromEntries(
@@ -254,6 +391,7 @@ export function RoutineBuilder() {
 
   const invalidateResult = () => {
     requestRef.current?.abort();
+    importRef.current?.abort();
     if (liveTimerRef.current !== null) {
       window.clearTimeout(liveTimerRef.current);
       liveTimerRef.current = null;
@@ -270,6 +408,7 @@ export function RoutineBuilder() {
     setSwapError(null);
     setPendingSwap(null);
     setLiveBlocked(false);
+    setImportNotice(null);
   };
 
   const handleProgramChange = (next: Program[]) => {
@@ -335,7 +474,10 @@ export function RoutineBuilder() {
       return;
     }
 
+    setImportNotice(null);
+
     requestRef.current?.abort();
+    importRef.current?.abort();
     const controller = new AbortController();
     requestRef.current = controller;
     const request = requestFor(programs, selected, preferences, constraints, 0);
@@ -481,10 +623,25 @@ export function RoutineBuilder() {
     }
   };
 
+  useEffect(() => {
+    if (!catalog || importStarted.current) return;
+    const token = new URLSearchParams(window.location.search).get("plan");
+    if (!token) return;
+    importStarted.current = true;
+    // Drop the token from the address bar so a refresh does not re-import.
+    const url = new URL(window.location.href);
+    url.searchParams.delete("plan");
+    window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+    // Loading a shared plan is the one job of this effect, and it necessarily
+    // resets most of the planner's state. There is no user event to hang it on.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void importSharedPlan(token, catalog);
+  }, [catalog, importSharedPlan]);
+
   // When a previous visit ended on the Timetable tab, regenerate the plans
   // once the catalog is ready so the routine is waiting for them.
   useEffect(() => {
-    if (!restoreStep || !catalog || !hydrated) return;
+    if (importStarted.current || !restoreStep || !catalog || !hydrated) return;
 
     const timer = window.setTimeout(() => {
       void (async () => {
@@ -594,8 +751,10 @@ export function RoutineBuilder() {
     cause: "rules" | "sections",
   ) => {
     requestRef.current?.abort();
+    importRef.current?.abort();
     swapRef.current?.abort();
     if (liveTimerRef.current !== null) window.clearTimeout(liveTimerRef.current);
+    setImportNotice(null);
     setLiveBusy(true);
     setLiveError(null);
     setPageLoading(false);
@@ -764,6 +923,25 @@ export function RoutineBuilder() {
         id="main"
         className="mx-auto w-full max-w-[1480px] px-[var(--space-gutter)] pb-16 sm:pb-20"
       >
+        {importNotice ? (
+          <div
+            role="status"
+            className={`mx-auto mt-6 w-full max-w-[1180px] border px-4 py-3 ${
+              importNotice.tone === "warning"
+                ? "border-coral/60 bg-coral-tint/30"
+                : "border-green/45 bg-green-tint/40"
+            }`}
+          >
+            <p
+              className={`mono-label ${importNotice.tone === "warning" ? "text-coral-ink" : "text-green-deep"}`}
+            >
+              {importNotice.title}
+            </p>
+            <p className="mt-1.5 max-w-[70ch] text-[0.8125rem] leading-relaxed text-ink-soft">
+              {importNotice.message}
+            </p>
+          </div>
+        ) : null}
         <div ref={panelRef} className="scroll-mt-2 pt-8 lg:pt-10">
           <AnimatePresence mode="wait" initial={false}>
             {step === 1 && (
@@ -860,6 +1038,7 @@ export function RoutineBuilder() {
                   headingRef={stepHeadingRef}
                   constraints={constraints}
                   catalog={catalog}
+                  programs={programs}
                   preferences={preferences}
                   customRoutine={customRoutine}
                   liveBusy={liveBusy}

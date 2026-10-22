@@ -231,10 +231,11 @@ backend/
   tests/          Parser, scheduler, and API tests
 
 frontend/
-  app/            Next.js page, layout, global styles
-  components/     Course picker, constraints, results, ledger UI
+  app/            Next.js page, layout, global styles, and the /share/[token] route
+  components/     Course picker, constraints, results, ledger UI, share button,
+                  read-only shared plan
   lib/            API client, shared types, schedule helpers, motion tokens,
-                  consent and snapshot storage
+                  consent and snapshot storage, share-link codec
 
 doc/              Source registrar PDFs
 ```
@@ -261,6 +262,42 @@ a refresh does not mean retyping everything.
   left alone so in-progress work is not thrown away.
 - The details never reach the API. The server sees the same request whether or not the student
   opted in.
+
+## Shared Links
+
+A finalised routine can be shared as a link that carries the plan inside the URL. There is no
+database and no server-side record, so a shared link works on the free Render instance and never
+expires.
+
+```text
+https://routine-chai.vercel.app/share/eyJ2IjoxLCJwIjpbIkJTQ1NFIl0sImMiOltbIkNTRSAxMTExIiwiQSJdXX0
+```
+
+- **Payload.** Compact JSON, then UTF-8, then base64url (no `+`, `/`, or `=`, so the token is a
+  single safe path segment):
+
+  ```json
+  {"v":1,"p":["BSCSE"],"c":[["CSE 1111","A"],["CSE 1112","B"]],"m":[["CSE 4000A","A","Sat","09:00","11:00"]]}
+  ```
+
+  `v` is the payload version, `p` the programs the plan was built for, `c` the course/section
+  pairs, and `m` the manual project slots. The student's blocked hours, live caps, and faculty
+  preferences are deliberately left out: only the finalised routine is shared.
+- **Resolution.** The receiver's browser decodes the token and resolves every course and section
+  against the catalog from `GET /api/catalog`, so titles, rooms, faculty, and meeting times always
+  come from the live sheet. A course or section the current catalog no longer has is listed as
+  missing rather than silently dropped.
+- **Import.** "Use this plan" sends the receiver to `/?plan=<token>`. The planner pins each shared
+  section, copies any manual project slot, and requests that exact combination with permissive
+  constraints, because the sender may have raised the classes-per-day cap. The token is then
+  removed from the address bar so a refresh does not re-import.
+- **Trust.** `lib/share.ts` treats the token as untrusted input: a base64url charset check, a
+  2048-character cap, a version match, at most 24 courses and 3 manual slots, bounded code and
+  section names, valid clock times, and manual slots restricted to `CSE 4000A`, `DS 4000A`, and
+  `EEE 4902`. Anything else renders a "this is not a routine link" sheet instead of a plan.
+- **Privacy.** A token is encoded, not encrypted. The share control states that anyone holding the
+  link can read the plan, and nothing is written to our server or to the receiver's storage by
+  opening one.
 
 ## Deployment
 
@@ -349,7 +386,7 @@ cd backend
 ..\.venv\Scripts\python.exe -m pytest -q
 ```
 
-Current suite: **122 passed**. It covers parser schema and PDF spot checks, BSEEE parsing and catalog merging, hard-constraint rejection, multi-program eligibility, gap classification, soft-constraint ranking, randomized validity, pinned-section identity, program diagnostics, and API contracts.
+Current suite: **130 passed**. It covers parser schema and PDF spot checks, BSEEE parsing and catalog merging, hard-constraint rejection, multi-program eligibility, gap classification, soft-constraint ranking, randomized validity, pinned-section identity, program diagnostics, and API contracts.
 
 Frontend:
 
@@ -361,10 +398,15 @@ npm run build
 ```
 
 There is no browser E2E suite yet; frontend verification is lint, typecheck, and production build.
+The share-link codec (`frontend/lib/share.ts`) has no unit test either: it is covered by typecheck
+plus a manual round trip. Generate a plan, copy the link, open it in a private window, then confirm
+"Use this plan" reproduces the same sections.
 
 ## Scope and Limitations
 
 - No database, authentication, or PDF upload.
+- Share links are self-contained, so they cannot be revoked or edited after the fact; changing the
+  plan means sharing a new link.
 - The catalog is an offline generated artifact, not a live registrar feed.
 - The API trusts the committed catalog; rebuild it if the registrar publishes a newer PDF.
 - Section/faculty preferences are optional; automatic selection is the default.
