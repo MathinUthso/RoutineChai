@@ -101,6 +101,18 @@ export function CalendarIcon({ className }: IconProps) {
   );
 }
 
+/** Share node: one plan handed out to two readers. */
+export function ShareIcon({ className }: IconProps) {
+  return (
+    <svg {...base} className={className}>
+      <circle cx="3.9" cy="8" r="1.55" />
+      <circle cx="12.1" cy="3.9" r="1.55" />
+      <circle cx="12.1" cy="12.1" r="1.55" />
+      <path d="M5.3 7.3l5.4-2.7M5.3 8.7l5.4 2.7" />
+    </svg>
+  );
+}
+
 /** Murgi, the bird behind the planner. */
 export function MurgiIcon({ className }: IconProps) {
   return (
