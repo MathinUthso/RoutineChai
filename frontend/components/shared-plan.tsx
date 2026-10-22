@@ -132,14 +132,6 @@ export function SharedPlanView({ plan, token }: { plan: SharedPlan; token: strin
 
   return (
     <div className="space-y-4">
-      <div className={CAVEAT_CLASS}>
-        <p className="mono-label text-coral-ink">Before you rely on it</p>
-        <p className="mt-1.5 text-[0.8125rem] leading-relaxed text-ink-soft">
-          This plan came from a link. Anyone who has the link can read it. Check every meeting
-          against the registrar notice before you register.
-        </p>
-      </div>
-
       <div className="border border-rule bg-paper-raised shadow-sheet">
         <div className="flex flex-wrap items-start justify-between gap-4 border-b border-rule px-5 py-4">
           <div className="min-w-0">
