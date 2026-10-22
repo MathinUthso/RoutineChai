@@ -1,10 +1,9 @@
 "use client";
 
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { buildRoutineCalendar, calendarFilename } from "@/lib/calendar";
 import { TONE_CLASS, toneFor } from "@/lib/course-tone";
 import { durations, panelVariants } from "@/lib/motion";
-import { formatGap, formatMeeting } from "@/lib/schedule";
+import { formatGap } from "@/lib/schedule";
 import { planLabel } from "@/lib/section-plan";
 import type {
   CatalogResponse,
@@ -12,13 +11,17 @@ import type {
   CoursePreference,
   Diagnostics,
   GenerateResult,
+  Program,
   Routine,
   ScoreBreakdown,
 } from "@/lib/types";
-import { ArrowLeftIcon, ArrowRightIcon, CalendarIcon } from "./icons";
+import { CalendarDownload } from "./calendar-download";
+import { ArrowLeftIcon, ArrowRightIcon } from "./icons";
 import { activeLiveRules, LiveRefine } from "./live-refine";
 import type { LiveRule } from "./live-refine";
+import { RoutineCourses } from "./routine-courses";
 import { SectionBoard } from "./section-board";
+import { ShareButton } from "./share-button";
 import { WeeklyCalendar } from "./weekly-calendar";
 
 type ResultStatus = "idle" | "loading" | "error" | "ready";
@@ -34,6 +37,7 @@ type ResultsPanelProps = {
   headingRef?: React.RefObject<HTMLHeadingElement | null>;
   constraints: Constraints;
   catalog: CatalogResponse | null;
+  programs: Program[];
   preferences: Record<string, CoursePreference>;
   customRoutine: Routine | null;
   liveBusy: boolean;
@@ -260,21 +264,15 @@ function Breakdown({ routine }: { routine: Routine }) {
   );
 }
 
-function downloadCalendar(routine: Routine) {
-  const blob = new Blob([buildRoutineCalendar(routine)], {
-    type: "text/calendar;charset=utf-8",
-  });
-  const href = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = href;
-  anchor.download = calendarFilename(routine);
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
-  window.setTimeout(() => URL.revokeObjectURL(href), 1000);
-}
-
-function RoutineDetail({ routine, planName }: { routine: Routine; planName: string }) {
+function RoutineDetail({
+  routine,
+  planName,
+  programs,
+}: {
+  routine: Routine;
+  planName: string;
+  programs: Program[];
+}) {
   return (
     <div className="border border-rule bg-paper-raised shadow-sheet">
       <div className="flex flex-wrap items-start justify-between gap-4 border-b border-rule px-5 py-4">
@@ -298,15 +296,8 @@ function RoutineDetail({ routine, planName }: { routine: Routine; planName: stri
               {routine.score.toFixed(1)}
             </p>
           </div>
-          <button
-            type="button"
-            onClick={() => downloadCalendar(routine)}
-            title="Download every class as a weekly .ics from the next occurrence. Verify dates before relying on it."
-            className="press inline-flex min-h-9 items-center gap-1.5 border border-rule-strong px-2.5 font-mono text-[0.625rem] uppercase tracking-[0.12em] text-ink hover:border-ink hover:bg-paper focus-visible:border-ink"
-          >
-            <CalendarIcon className="h-3.5 w-3.5" />
-            Google Calendar
-          </button>
+          <ShareButton routine={routine} programs={programs} />
+          <CalendarDownload routine={routine} />
         </div>
       </div>
 
@@ -317,71 +308,7 @@ function RoutineDetail({ routine, planName }: { routine: Routine; planName: stri
         <Breakdown routine={routine} />
       </div>
 
-      <div className="border-t border-rule">
-        <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 px-5 pt-4 pb-3">
-          <h4 className="mono-label text-ink">Courses</h4>
-          <p className="mono-label tabular text-ink-faint">
-            {routine.courses.length} courses · {routine.stats.total_credits.toFixed(1)} credits
-          </p>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[34rem] border-collapse text-left">
-            <caption className="sr-only">Courses and meetings in routine {routine.id}</caption>
-          <thead>
-            <tr className="border-b border-rule">
-              <th scope="col" className="mono-label px-4 py-2.5 text-ink-faint">
-                Course
-              </th>
-              <th scope="col" className="mono-label hidden px-4 py-2.5 text-ink-faint sm:table-cell">
-                Section
-              </th>
-              <th scope="col" className="mono-label px-4 py-2.5 text-ink-faint">
-                Meetings
-              </th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-rule/70">
-            {routine.courses.map((course) => (
-              <tr key={course.code}>
-                <td className="px-4 py-3 align-top">
-                  <p className="font-mono text-[0.75rem] font-medium text-ink">{course.code}</p>
-                  <p className="mt-0.5 max-w-[18rem] text-[0.8125rem] leading-snug text-ink-soft">
-                    {course.title}
-                  </p>
-                  <p className="mono-label mt-1 flex flex-wrap items-center gap-1.5 text-ink-faint">
-                    <span>
-                      {course.kind === "lab" ? "Lab" : "Theory"} · {course.faculty}
-                    </span>
-                    {course.manual && (
-                      <span className="border border-coral/45 px-1 py-0.5 text-[0.5625rem] tracking-[0.1em] text-coral-ink">
-                        Manual
-                      </span>
-                    )}
-                  </p>
-                </td>
-                <td className="hidden px-4 py-3 align-top sm:table-cell">
-                  <span className="inline-flex border border-rule px-1.5 py-1 font-mono text-[0.75rem] text-ink">
-                    {course.section}
-                  </span>
-                </td>
-                <td className="px-4 py-3 align-top">
-                  <ul className="space-y-1">
-                    {course.meetings.map((meeting, index) => (
-                      <li
-                        key={`${meeting.day}-${meeting.start}-${index}`}
-                        className="font-mono text-[0.7rem] leading-relaxed tabular text-ink-soft"
-                      >
-                        {formatMeeting(meeting)}
-                      </li>
-                    ))}
-                  </ul>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-          </table>
-        </div>
-      </div>
+      <RoutineCourses routine={routine} />
     </div>
   );
 }
@@ -397,6 +324,7 @@ export function ResultsPanel({
   headingRef,
   constraints,
   catalog,
+  programs,
   preferences,
   customRoutine,
   liveBusy,
@@ -802,7 +730,7 @@ export function ResultsPanel({
                         ease: [0.2, 0.7, 0.2, 1],
                       }}
                     >
-                      <RoutineDetail routine={selected} planName={planName} />
+                      <RoutineDetail routine={selected} planName={planName} programs={programs} />
                     </motion.div>
                   )}
                 </AnimatePresence>
